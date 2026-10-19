@@ -75,8 +75,8 @@ test(
 
     const pub = settings.getPublic();
     assert.equal(pub.apiKey, undefined);
-    assert.equal(pub.hasApiKey, true);
-    assert.equal(pub.apiKeyHint, '…1234');
+    // A key saved by an older version gives no access: only a TailorBid connection does.
+    assert.equal(pub.hasApiKey, false);
 
     settings.saveConnection({ apiKey: '' });
     assert.equal(settings.get().apiKey, '');

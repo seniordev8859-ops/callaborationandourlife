@@ -374,7 +374,9 @@ export default function Prepare({ settings, onSave, onDirtyChange, hasApiKey, ac
           </div>
         )}
 
-        {!hasApiKey && <div className="callout">Add your OpenAI API key in Setup first.</div>}
+        {!hasApiKey && (
+          <div className="callout">Open the assistant from TailorBid first (Interview Assistant button).</div>
+        )}
         {error && <div className="callout callout-danger">{error}</div>}
 
         {scan && (

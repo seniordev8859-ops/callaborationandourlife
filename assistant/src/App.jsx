@@ -12,6 +12,7 @@ import ConfirmDialog from './ConfirmDialog.jsx';
 import Prepare from './Prepare.jsx';
 import { duration, plural } from './format.js';
 import StartSessionDialog from './StartSessionDialog.jsx';
+import ConnectScreen from './ConnectScreen.jsx';
 import AnswerPanel from './AnswerPanel.jsx';
 import CaptionsPanel from './CaptionsPanel.jsx';
 import { MoreMenu, ToggleChip, VIEW_MODES, ViewSwitch } from './Controls.jsx';
@@ -76,10 +77,7 @@ export default function App() {
     };
     connect()
       .then((s) => s || getSettings())
-      .then((s) => {
-        setSettings(s);
-        if (!s.hasApiKey) setTab('setup');
-      });
+      .then(setSettings);
     const onHashChange = () => connect().then((s) => s && setSettings(s));
     window.addEventListener('hashchange', onHashChange);
     return () => window.removeEventListener('hashchange', onHashChange);
@@ -249,6 +247,9 @@ export default function App() {
   }, [answerLatest, cycleView]);
 
   if (!settings) return null;
+  // Only through TailorBid: without a live connection there is nothing to use.
+  if (!settings.hasApiKey)
+    return <ConnectScreen site={settings.site} expired={Boolean(settings.tailorbid?.expired)} error={error} />;
   const targetLanguage = translationTarget(settings.profile.nativeLanguage);
   const transcriptText = segments
     .map((s) => s.text)

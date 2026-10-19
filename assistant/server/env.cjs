@@ -7,7 +7,7 @@ const { parseEnv } = require('node:util');
 // database and other secrets. They override
 // existing variables on purpose, so a stale system-wide variable can't shadow them.
 const FILE = path.join(__dirname, '..', '..', '.env.local');
-const SHARED = ['OPENAI_API_KEY', 'NEXT_PUBLIC_ASSISTANT_URL', 'APP_URL'];
+const SHARED = ['NEXT_PUBLIC_ASSISTANT_URL', 'APP_URL'];
 const USED = (name) => name.startsWith('ASSISTANT_') || SHARED.includes(name);
 
 try {

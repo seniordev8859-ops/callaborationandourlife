@@ -35,7 +35,8 @@ const routes = {
     return settings.getPublic();
   },
   'settings/test-connection': (values) => ai.testConnection(values),
-  'settings/save-connection': (values) => {
+  'settings/save-connection': ({ apiKey, ...values }) => {
+    // Models only: OpenAI access comes from the TailorBid connection, never from a key saved here.
     settings.saveConnection(values);
     ai.reset(); // the next request uses the new key and models
     return settings.getPublic();

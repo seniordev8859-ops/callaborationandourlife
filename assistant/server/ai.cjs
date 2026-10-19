@@ -57,16 +57,14 @@ const REQUEST_TIMEOUT_MS = 45000;
 // nothing arrives for this long (the connection dropped silently or OpenAI stalled).
 const STREAM_IDLE_MS = 30000;
 
-// Opened from TailorBid, requests go through TailorBid with its key; otherwise the key set here is used.
+const NOT_CONNECTED =
+  'Not connected to TailorBid. Open the assistant from the Interview Assistant button in TailorBid (admins, users and callers).';
+
 function getClient() {
   if (client) return client;
-  const via = tailorbid.clientOptions();
-  const { apiKey } = settings.get();
-  if (!via && !apiKey)
-    throw new Error(
-      'Open the assistant from TailorBid (Interview Assistant button), or add an OpenAI API key in Setup.',
-    );
-  const options = via || { apiKey };
+  // Only through a TailorBid connection: the assistant works for signed-in TailorBid admins, users and callers.
+  const options = tailorbid.clientOptions();
+  if (!options) throw new Error(NOT_CONNECTED);
   client = new OpenAI({
     ...options,
     httpAgent: keepAliveAgent(options.baseURL),
@@ -145,12 +143,11 @@ function reset() {
 async function testConnection(values = {}) {
   const current = settings.get();
   const v = { ...current, ...Object.fromEntries(Object.entries(values).filter(([, x]) => x)) };
-  // A key typed in Setup is tested as is; otherwise the TailorBid connection, when there is one.
-  const via = !values.apiKey && tailorbid.clientOptions();
-  if (!via && !v.apiKey) return { ok: false, error: 'No API key entered.' };
+  const via = tailorbid.clientOptions();
+  if (!via) return { ok: false, error: NOT_CONNECTED };
   const t0 = Date.now();
   try {
-    const client = new OpenAI({ ...(via || { apiKey: v.apiKey }), maxRetries: 0, timeout: 20000 });
+    const client = new OpenAI({ ...via, maxRetries: 0, timeout: 20000 });
     await client.responses.create({
       model: v.model,
       input: 'Reply with OK.',

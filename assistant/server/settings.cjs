@@ -144,7 +144,10 @@ function getPublic() {
   return {
     ...rest,
     tailorbid: tb,
-    hasApiKey: viaTailorbid || Boolean(apiKey),
+    // OpenAI access comes only through a live TailorBid connection.
+    hasApiKey: viaTailorbid,
+    // The TailorBid site the assistant connects to (shown on the "connect through TailorBid" screen).
+    site: (process.env.APP_URL || '').split(',')[0].trim(),
     apiKeyHint: apiKey ? `…${apiKey.slice(-4)}` : '',
     sources: viaTailorbid ? { ...sources(), apiKey: 'tailorbid' } : sources(),
     fromEnv: Object.keys(fromEnv()),

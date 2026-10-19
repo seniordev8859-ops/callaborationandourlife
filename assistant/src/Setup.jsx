@@ -71,7 +71,6 @@ const SECTIONS = [
   { id: 'privacy', title: 'Privacy & data' },
 ];
 
-const looksLikeKey = (key) => /^sk-[A-Za-z0-9_-]{20,}$/.test(key);
 const cleanError = (err) => err.message;
 
 // Personal contact details the AI never needs. Removed locally, before anything is sent anywhere.
@@ -414,23 +413,19 @@ function ModelField({ field, value, source, onChange, onReset }) {
   );
 }
 
-// API key and models. Saved separately from the profile, with its own Test and Save buttons.
+// The TailorBid connection (it provides the OpenAI access) and the models. Saved separately from the
+// profile, with its own Test and Save buttons.
 function ConnectionCard({ settings, onSaved, onTailorbidChanged, askConfirm }) {
   const current = useMemo(() => Object.fromEntries(CONNECTION_FIELDS.map((f) => [f.key, settings[f.key]])), [settings]);
   const [draft, setDraft] = useState(current);
-  const [apiKey, setApiKey] = useState('');
-  const [editingKey, setEditingKey] = useState(!settings.hasApiKey);
-  const [showKey, setShowKey] = useState(false);
   const [status, setStatus] = useState(null); // null | 'testing' | 'saving' | { ok, error, ms, saved }
 
   useEffect(() => setDraft(current), [current]);
 
   const sources = settings.sources || {};
-  const keyInvalid = apiKey.trim() !== '' && !looksLikeKey(apiKey.trim());
   const changed = Object.fromEntries(
     CONNECTION_FIELDS.filter((f) => draft[f.key] !== current[f.key]).map((f) => [f.key, draft[f.key].trim()]),
   );
-  if (apiKey.trim()) changed.apiKey = apiKey.trim();
   const dirty = Object.keys(changed).length > 0;
   const busy = status === 'testing' || status === 'saving';
 
@@ -440,34 +435,15 @@ function ConnectionCard({ settings, onSaved, onTailorbidChanged, askConfirm }) {
   };
 
   const save = async () => {
-    if (keyInvalid || Object.values(changed).some((v) => !v)) return;
+    if (Object.values(changed).some((v) => !v)) return;
     setStatus('saving');
     const fresh = await saveConnection(changed);
     onSaved(fresh);
-    setApiKey('');
-    setShowKey(false);
-    setEditingKey(false);
     // Check right away that the saved combination really works.
     setStatus({ ...(await testConnection({})), saved: true });
   };
 
   const reset = (key) => saveConnection({ [key]: '' }).then(onSaved);
-
-  const removeKey = () =>
-    askConfirm({
-      title: 'Remove the API key saved in the app?',
-      message:
-        sources.apiKey === 'app' && settings.fromEnv?.includes('apiKey')
-          ? 'The app will use the key from .env.local again.'
-          : 'The app will stop answering until you add a key again.',
-      confirmLabel: 'Remove key',
-      danger: true,
-      onConfirm: async () => {
-        onSaved(await saveConnection({ apiKey: '' }));
-        setStatus(null);
-        setEditingKey(true);
-      },
-    });
 
   // Enter inside this card must not submit the profile form around it.
   const stopEnter = (e) => e.key === 'Enter' && e.preventDefault();
@@ -476,76 +452,12 @@ function ConnectionCard({ settings, onSaved, onTailorbidChanged, askConfirm }) {
     <Section
       id="connection"
       title="Connection"
-      description="Your OpenAI account, and the models used for answers and translation. Changes apply immediately."
+      description="Your TailorBid connection (it provides the OpenAI access), and the models used for answers and translation."
     >
       <div className="connection" onKeyDown={stopEnter}>
         {settings.tailorbid && (
           <TailorbidField tailorbid={settings.tailorbid} onChanged={onTailorbidChanged} askConfirm={askConfirm} />
         )}
-        <div className="field" hidden={sources.apiKey === 'tailorbid'}>
-          <span className="field-label">OpenAI API key {settings.hasApiKey && SOURCE_BADGE[sources.apiKey]}</span>
-          {!editingKey ? (
-            <div className="key-row">
-              <span className="readonly key-current">
-                <Icon name="lock" /> Key ending in <code>{settings.apiKeyHint}</code>
-              </span>
-              <button type="button" onClick={() => setEditingKey(true)}>
-                Change key
-              </button>
-              {sources.apiKey === 'app' && (
-                <button type="button" className="ghost danger-text" onClick={removeKey}>
-                  Remove
-                </button>
-              )}
-            </div>
-          ) : (
-            <>
-              <div className="input-group">
-                <input
-                  type={showKey ? 'text' : 'password'}
-                  value={apiKey}
-                  onChange={(e) => {
-                    setApiKey(e.target.value);
-                    setStatus(null);
-                  }}
-                  placeholder="sk-..."
-                  autoComplete="off"
-                  spellCheck={false}
-                  aria-invalid={keyInvalid}
-                  aria-label="OpenAI API key"
-                />
-                <button
-                  type="button"
-                  className="ghost icon-only"
-                  onClick={() => setShowKey((v) => !v)}
-                  title={showKey ? 'Hide key' : 'Show key'}
-                  aria-label={showKey ? 'Hide key' : 'Show key'}
-                  disabled={!apiKey}
-                >
-                  <Icon name={showKey ? 'eyeOff' : 'eye'} />
-                </button>
-                {settings.hasApiKey && (
-                  <button
-                    type="button"
-                    className="ghost"
-                    onClick={() => {
-                      setEditingKey(false);
-                      setApiKey('');
-                    }}
-                  >
-                    Cancel
-                  </button>
-                )}
-              </div>
-              <span className={keyInvalid ? 'field-error' : 'field-hint'}>
-                {keyInvalid
-                  ? 'This doesn\'t look like an OpenAI key. Keys start with "sk-" and are long; check it was copied completely.'
-                  : 'Stored encrypted on this PC with Windows protection. A key set here is used instead of the one in .env.local.'}
-              </span>
-            </>
-          )}
-        </div>
-
         <div className="model-grid">
           {CONNECTION_FIELDS.map((f) => (
             <ModelField
@@ -563,10 +475,10 @@ function ConnectionCard({ settings, onSaved, onTailorbidChanged, askConfirm }) {
         </div>
 
         <div className="button-row">
-          <button type="button" onClick={test} disabled={busy || keyInvalid || (!settings.hasApiKey && !apiKey.trim())}>
+          <button type="button" onClick={test} disabled={busy || !settings.hasApiKey}>
             {status === 'testing' ? 'Testing…' : 'Test'}
           </button>
-          <button type="button" className="primary" onClick={save} disabled={busy || !dirty || keyInvalid}>
+          <button type="button" className="primary" onClick={save} disabled={busy || !dirty}>
             {status === 'saving' ? 'Saving…' : 'Save connection'}
           </button>
           {dirty && !busy && (
@@ -575,7 +487,6 @@ function ConnectionCard({ settings, onSaved, onTailorbidChanged, askConfirm }) {
               className="ghost"
               onClick={() => {
                 setDraft(current);
-                setApiKey('');
                 setStatus(null);
               }}
             >
@@ -686,20 +597,15 @@ export default function Setup({ settings, onSave, onDone, onReplaceSettings, onD
     });
 
   // Connection status shown at the top of the page.
-  const keyBadge =
-    settings.sources?.apiKey === 'tailorbid' ? (
-      <Badge tone="info">
-        <Icon name="lock" /> Connected to TailorBid
-      </Badge>
-    ) : settings.hasApiKey ? (
-      <Badge tone="info">
-        <Icon name="lock" /> API key set ({settings.apiKeyHint})
-      </Badge>
-    ) : (
-      <Badge tone="danger">
-        <Icon name="alert" /> No API key
-      </Badge>
-    );
+  const keyBadge = settings.hasApiKey ? (
+    <Badge tone="info">
+      <Icon name="lock" /> Connected to TailorBid
+    </Badge>
+  ) : (
+    <Badge tone="danger">
+      <Icon name="alert" /> Not connected to TailorBid
+    </Badge>
+  );
 
   const languageValue = profile.nativeLanguage || 'English';
 
@@ -941,7 +847,7 @@ export default function Setup({ settings, onSave, onDone, onReplaceSettings, onD
                 className="primary"
                 onClick={onDone}
                 disabled={!settings.hasApiKey}
-                title={settings.hasApiKey ? '' : 'Add an API key first'}
+                title={settings.hasApiKey ? '' : 'Connect through TailorBid first'}
               >
                 Go to Live →
               </button>

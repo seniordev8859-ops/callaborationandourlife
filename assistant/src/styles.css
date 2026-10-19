@@ -687,3 +687,12 @@ button.ghost.icon-button.danger-text:hover:not(:disabled) { color: var(--danger)
 .section-title h2 { margin: 0 0 4px; font-size: 16px; font-weight: 700; letter-spacing: -.01em; text-transform: none; color: var(--text); }
 .section-title p { margin: 0; font-size: 13px; color: var(--muted); }
 .profile-editor .save-bar { margin-top: 0; }
+
+/* Not connected to TailorBid (ConnectScreen.jsx) */
+.connect-screen { min-height: 100vh; display: grid; place-items: center; padding: 24px; }
+.connect-card { max-width: 440px; text-align: center; display: flex; flex-direction: column; align-items: center; gap: 14px; padding: 32px 28px; }
+.connect-card h1 { margin: 0; font-size: 20px; font-weight: 700; letter-spacing: -.01em; }
+.connect-card p { margin: 0; color: var(--muted); font-size: 14px; line-height: 1.55; }
+.connect-card .callout { width: 100%; text-align: left; }
+.connect-mark { width: 44px; height: 44px; border-radius: 12px; }
+.connect-mark .icon { width: 24px; height: 24px; }

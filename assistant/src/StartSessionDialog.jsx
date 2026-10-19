@@ -9,7 +9,6 @@ const STAGES = [
   { value: 'onboarding', label: 'Onboarding call', hint: 'Your first days: understanding the team and the work.' },
 ];
 
-
 const SOURCES = [{ value: 'windows', label: 'Windows Live Captions', hint: 'Fastest and free. Recommended.' }];
 
 // Remembers the last company/role/stage/source so a follow-up call takes one click.

@@ -78,3 +78,20 @@ test('disconnect clears the interview fields', () => {
   assert.equal(s.profile.resume, '');
   assert.equal(s.profile.customPrompt, '');
 });
+
+test('without a TailorBid connection nothing reaches OpenAI, not even with a personal key', async () => {
+  tailorbid.disconnect();
+  const ai = require('../server/ai.cjs');
+  ai.reset();
+  let calls = 0;
+  globalThis.fetch = async () => {
+    calls++;
+    return new Response('{}');
+  };
+  const test = await ai.testConnection({ apiKey: 'sk-not-a-real-key' });
+  assert.equal(test.ok, false);
+  assert.match(test.error, /TailorBid/);
+  await assert.rejects(ai.translate('Hello', 'Spanish'), /TailorBid/);
+  assert.equal(calls, 0);
+  assert.equal(settings.getPublic().hasApiKey, false);
+});

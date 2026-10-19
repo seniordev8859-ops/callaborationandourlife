@@ -38,7 +38,7 @@ import { PresenceDot } from "./Presence";
 import { DEFAULT_TZ, getHomeTz, getInterviewTz, setViewerTz, timeZoneChoices, tzDayKey } from "@/lib/viewerTz";
 import SearchSelect from "./SearchSelect";
 import ScheduleInterviewForm from "./ScheduleInterviewForm";
-import InterviewAssistant from "./InterviewAssistant";
+import InterviewAssistant, { canUseAssistant } from "./InterviewAssistant";
 import { BoardView, ListView, ViewSwitch, columnOf, useViewMode, type ColumnKey, type DropTarget } from "./InterviewViews";
 
 type Options = {
@@ -667,7 +667,7 @@ export default function InterviewBoard({
             }}
           />
           <div className="mt-5 flex flex-wrap justify-end gap-2 border-t border-slate-200 pt-4 [&>button]:flex-1 sm:[&>button]:flex-none">
-            {!view.deletedAt && (
+            {!view.deletedAt && canUseAssistant(myRole) && (
               <button className="btn btn-secondary" onClick={() => setDialog({ kind: "assistant", i: view })}>
                 <Sparkles />
                 Interview Assistant

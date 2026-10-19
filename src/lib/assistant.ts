@@ -16,6 +16,10 @@ import { resolveOpenAI } from "./openaiKeys";
 import { oid } from "./query";
 
 const AUDIENCE = "interview-assistant";
+
+/** Who may use the Interview Assistant: admins, users (profile managers) and callers. Not bidders. */
+export const canUseAssistant = (role: string) => role === "admin" || role === "user" || role === "caller";
+const NOT_ALLOWED = "The Interview Assistant is for TailorBid admins, users and callers.";
 const TTL_MS = 12 * 60 * 60 * 1000; // one working day
 
 // A key of its own (derived from JWT_SECRET), so an assistant token can never be used as a sign-in cookie.
@@ -23,6 +27,11 @@ function secret() {
   const s = process.env.JWT_SECRET;
   if (!s) throw new Error("JWT_SECRET is not set");
   return createHash("sha256").update(`${s}:${AUDIENCE}`).digest();
+}
+
+/** Refuses accounts that may not use the assistant (before a connection token is issued). */
+export function requireAssistantRole(user: { role: string }) {
+  if (!canUseAssistant(user.role)) throw new HttpError(403, NOT_ALLOWED);
 }
 
 export async function signAssistantToken(uid: string, interviewId: string | null) {
@@ -66,6 +75,8 @@ async function checkAccess(payload: TokenPayload) {
   await connectDB();
   const user = await User.findById(payload.uid);
   if (!user || user.status !== "approved") throw new HttpError(401, "This TailorBid account can no longer use the assistant.");
+  // Checked on every request (not only when connecting), so a role change applies to an open connection too.
+  if (!canUseAssistant(user.role)) throw new HttpError(403, NOT_ALLOWED);
   const interview = payload.iid ? await visibleInterview(user, payload.iid) : null;
   return { user, interview };
 }

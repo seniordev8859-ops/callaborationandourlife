@@ -10,6 +10,9 @@ const ASSISTANT_URL = (process.env.NEXT_PUBLIC_ASSISTANT_URL || "http://127.0.0.
 /** The Windows installer: always the latest GitHub release (assistant: npm run release:win). */
 const DOWNLOAD_URL =
   process.env.NEXT_PUBLIC_ASSISTANT_DOWNLOAD_URL || "https://github.com/seniordev8859-ops/callaborationandourlife/releases/latest/download/Interview-Assistant-Setup.exe";
+/** Who may use the assistant (the same rule as lib/assistant.ts): admins, users and callers, not bidders. */
+export const canUseAssistant = (role: string) => role === "admin" || role === "user" || role === "caller";
+
 /** Window name: a second click reuses the assistant's window instead of opening another one. */
 const TARGET = "interview-assistant";
 
