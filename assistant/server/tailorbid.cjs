@@ -15,8 +15,16 @@ const origin = (url) => {
 
 // Only these TailorBid sites may connect: a link from any other site could otherwise receive your
 // interview: TailorBid's APP_URL (.env.local) and TailorBid in development.
+// Each site counts with and without "www.", since the live site may redirect from one to the other.
+const withAndWithoutWww = (site) => {
+  if (!site) return [];
+  const url = new URL(site);
+  const other = url.hostname.startsWith('www.') ? url.hostname.slice(4) : `www.${url.hostname}`;
+  return [site, `${url.protocol}//${other}${url.port ? `:${url.port}` : ''}`];
+};
+
 function allowedOrigins() {
-  const extra = (process.env.APP_URL || '').split(',').map(origin);
+  const extra = (process.env.APP_URL || '').split(',').map(origin).flatMap(withAndWithoutWww);
   return ['http://localhost:3000', 'http://127.0.0.1:3000', ...extra].filter(Boolean);
 }
 
