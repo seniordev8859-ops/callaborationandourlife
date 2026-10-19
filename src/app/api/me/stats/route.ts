@@ -2,7 +2,6 @@ import { NextResponse } from "next/server";
 import { handler, requireUser } from "@/lib/auth";
 import { Application } from "@/lib/models/Application";
 import { InterviewRequest } from "@/lib/models/InterviewRequest";
-import { getSettings } from "@/lib/models/Settings";
 import { APP_TZ, dayKey, dayRange } from "@/lib/tz";
 
 const WEEKS = 8;
@@ -30,7 +29,6 @@ const monthOf = (k: string) => k.slice(0, 7);
  */
 export const GET = handler(async () => {
   const user = await requireUser();
-  const settings = await getSettings();
   // Weeks and months follow the default zone (GMT-04:00).
   const tz = APP_TZ;
   const today = dayKey(new Date(), tz);

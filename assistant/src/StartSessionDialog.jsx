@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 
-export const STAGES = [
+const STAGES = [
   { value: 'recruiter', label: 'Recruiter call', hint: 'Background, motivation, salary, availability.' },
   { value: 'hr', label: 'HR / behavioral', hint: 'Stories about teamwork, conflict and challenges.' },
   { value: 'technical', label: 'Technical call', hint: 'Your skills, past projects and technical questions.' },
@@ -9,7 +9,6 @@ export const STAGES = [
   { value: 'onboarding', label: 'Onboarding call', hint: 'Your first days: understanding the team and the work.' },
 ];
 
-export const stageLabel = (value) => STAGES.find((s) => s.value === value)?.label || value;
 
 const SOURCES = [{ value: 'windows', label: 'Windows Live Captions', hint: 'Fastest and free. Recommended.' }];
 

@@ -27,6 +27,26 @@ Not connected (or after **Disconnect**), the assistant uses a key saved in Setup
 | `src/app/api/assistant/session` · `context` · `openai/[...path]` | Token for an interview · resume and job description · OpenAI pass-through |
 | `assistant/server/tailorbid.cjs` | The assistant's side: allowed sites, connect, reload, OpenAI client options |
 
+## Windows app (for people who aren't developers)
+
+TailorBid's **Interview Assistant** dialog has a **Download for Windows** button. It downloads `Interview-Assistant-Setup.exe` from this repository's latest GitHub release. The installer needs no admin rights. The app:
+
+- runs the assistant in the background with a tray icon (Open, Start with Windows, Check for updates, Quit);
+- starts with Windows, so the button in TailorBid always works;
+- updates itself from GitHub Releases.
+
+The UI still opens in the browser. The app is built with Electron (`desktop/main.cjs`, `electron-builder.yml`). `desktop/prepare.mjs` builds into it only `APP_URL` and the assistant address from TailorBid's `.env.local`. No keys or secrets go into the installer.
+
+Publish a new version:
+
+```bash
+# 1. raise "version" in assistant/package.json (e.g. 0.1.1): installed copies update to it
+npm run dist:win             # build release/Interview-Assistant-Setup.exe, latest.yml and the .blockmap
+gh release create v0.1.1 release/Interview-Assistant-Setup.exe release/Interview-Assistant-Setup.exe.blockmap release/latest.yml   --title "Interview Assistant 0.1.1" --notes "What changed"
+```
+
+The download link always points to the latest release, so TailorBid needs no change. The installer isn't code-signed, so Windows shows "Windows protected your PC" the first time (More info → Run anyway). A code-signing certificate removes that warning.
+
 ## Stack
 
 - **React app (Vite)**, in `src/`: the whole UI, opened in Chrome or Edge.

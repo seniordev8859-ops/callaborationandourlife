@@ -60,7 +60,7 @@ async function connect({ origin: from, token }) {
   if (!site || !allowedOrigins().includes(site)) {
     throw Object.assign(
       new Error(
-        `This assistant isn't set up for ${from}. Set APP_URL=${site} in TailorBid's .env.local and restart it.`,
+        `This assistant only connects to ${allowedOrigins().find((o) => o.startsWith('https:')) || 'its own TailorBid site'}, not ${from}.`,
       ),
       { status: 403 },
     );

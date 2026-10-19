@@ -187,4 +187,3 @@ CRITICAL: The first section must be # PROFESSIONAL SUMMARY written as ONE PARAGR
 
 Take a deep breath and work on this problem step-by-step.`;
 
-export const PROMPT_PLACEHOLDERS = ["{{CANDIDATE_PROFILE}}", "{{CANDIDATE_EMAIL}}", "{{SIGN_OFF_NAME}}"] as const;

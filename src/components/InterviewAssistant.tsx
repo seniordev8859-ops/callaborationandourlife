@@ -1,12 +1,15 @@
 "use client";
 
 import { useState } from "react";
-import { ExternalLink, Sparkles } from "lucide-react";
+import { Download, ExternalLink, MonitorDown, Sparkles } from "lucide-react";
 import { Alert, api, Modal } from "./ui";
 import type { Interview } from "./interviews";
 
 /** Where the local Interview Assistant (assistant/ in this repo) listens; it runs on the user's Windows PC. */
 const ASSISTANT_URL = (process.env.NEXT_PUBLIC_ASSISTANT_URL || "http://127.0.0.1:4317").replace(/\/$/, "");
+/** The Windows installer: always the latest GitHub release (assistant: npm run release:win). */
+const DOWNLOAD_URL =
+  process.env.NEXT_PUBLIC_ASSISTANT_DOWNLOAD_URL || "https://github.com/seniordev8859-ops/callaborationandourlife/releases/latest/download/Interview-Assistant-Setup.exe";
 /** Window name: a second click reuses the assistant's window instead of opening another one. */
 const TARGET = "interview-assistant";
 
@@ -75,16 +78,28 @@ export default function InterviewAssistant({
             ? "The assistant loads this interview's resume and job description, and uses TailorBid's OpenAI key."
             : "It uses TailorBid's OpenAI key. Open it from an interview to load that interview's resume and job description too."}
         </p>
-        <details className="text-sm text-slate-600">
-          <summary className="cursor-pointer select-none font-medium text-slate-700">The page doesn't open?</summary>
-          <p className="mt-2">
-            The assistant runs on your Windows PC, not on this website. Start it first, in the TailorBid folder:
-          </p>
-          <pre className="mt-2 overflow-x-auto rounded-md bg-slate-900 px-3 py-2 text-xs text-slate-100">
-            npm run dev{"         "}# TailorBid development: starts both{"\n"}npm run assistant{"   "}# the assistant alone
-          </pre>
-          <p className="mt-2">Then click Open assistant again. It connects to TailorBid for 12 hours.</p>
-        </details>
+        <div className="flex gap-3 rounded-lg border border-slate-200 px-3.5 py-3 text-sm">
+          <span className="grid size-8 shrink-0 place-items-center rounded-lg border border-indigo-200 bg-indigo-50 text-indigo-600">
+            <MonitorDown className="size-4" />
+          </span>
+          <div className="min-w-0 flex-1 text-slate-600">
+            <div className="font-medium text-slate-900">First time on this computer?</div>
+            The assistant runs on your Windows PC (it reads Windows Live Captions). Install it once: it starts with Windows and updates itself, so after that this button just works.
+            <div className="mt-2.5 flex flex-wrap items-center gap-2">
+              <a className="btn btn-secondary btn-sm" href={DOWNLOAD_URL} download>
+                <Download />
+                Download for Windows
+              </a>
+              <span className="text-xs text-slate-400">Windows 10 or 11</span>
+            </div>
+            <details className="mt-2 text-xs text-slate-500">
+              <summary className="cursor-pointer select-none">Windows says &quot;Windows protected your PC&quot;?</summary>
+              <p className="mt-1">
+                Click <b className="font-medium text-slate-700">More info</b>, then <b className="font-medium text-slate-700">Run anyway</b>. Windows shows this for new apps it doesn&apos;t know yet.
+              </p>
+            </details>
+          </div>
+        </div>
         {error && <Alert>{error}</Alert>}
         <div className="flex justify-end gap-2">
           <button className="btn btn-secondary" onClick={onClose}>

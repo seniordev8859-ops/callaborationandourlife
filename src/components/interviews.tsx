@@ -138,9 +138,6 @@ export function fmtRequested(i: Pick<Interview, "mode" | "windowStart" | "window
   return sameDay(s, e) ? `${fmtDayTime(s)} – ${fmtTime(e)}` : `${fmtDayTime(s)} – ${fmtDayTime(e)}`;
 }
 
-/** Value for <input type="datetime-local"> in the viewer's time zone. */
-export const toLocalInput = toTzInput;
-
 /** "2h 15m left" / "overdue by 40m" until the scheduling deadline. */
 export function deadlineLabel(scheduleBy: string) {
   const ms = new Date(scheduleBy).getTime() - Date.now();

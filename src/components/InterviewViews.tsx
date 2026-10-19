@@ -5,7 +5,6 @@ import { ArrowDown, ArrowUp, Calendar, CalendarDays, ChevronLeft, ChevronRight, 
 import {
   CallerAvatar,
   LockBadge,
-  OUTCOME_LABEL,
   ProfileTag,
   profileColor,
   StepBar,
@@ -21,7 +20,7 @@ import {
 } from "./interviews";
 import { EmptyState, useClientPaging } from "./ui";
 import { PresenceDot } from "./Presence";
-import { fromWallTime, tzDayKey } from "@/lib/viewerTz";
+import { tzDayKey } from "@/lib/viewerTz";
 
 /* ------------------------------------------------------------ view switch */
 
@@ -106,11 +105,6 @@ const addDays = (key: string, n: number) => {
   return new Date(Date.UTC(y, m - 1, d + n)).toISOString().slice(0, 10);
 };
 const weekdayOf = (key: string) => ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][new Date(`${key}T12:00:00Z`).getUTCDay()];
-/** Start of a day key in the viewer's zone, as an instant. */
-const startOf = (key: string) => {
-  const [y, m, d] = key.split("-").map(Number);
-  return fromWallTime(y, m, d);
-};
 
 /**
  * Trello-style board. Grouped by date (default: one column per day, plus "Needs scheduling") or by status.

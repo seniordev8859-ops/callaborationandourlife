@@ -18,7 +18,7 @@ export function translationTarget(language) {
   return /^english$/i.test(l) ? '' : l;
 }
 
-export const LANGUAGES = [
+const LANGUAGES = [
   'Arabic',
   'Bengali',
   'Chinese (Simplified)',

@@ -14,7 +14,12 @@ try {
   const values = parseEnv(fs.readFileSync(FILE, 'utf8'));
   for (const [name, value] of Object.entries(values)) if (USED(name)) process.env[name] = value;
 } catch {
-  // No .env.local: defaults, and the settings saved in Setup.
+  // No .env.local (the installed Windows app): the public values built into it (desktop/prepare.mjs),
+  // then defaults and the settings saved in Setup.
+  try {
+    const built = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'desktop', 'config.json'), 'utf8'));
+    for (const [name, value] of Object.entries(built)) if (USED(name) && value) process.env[name] ??= value;
+  } catch {}
 }
 
 // The port of NEXT_PUBLIC_ASSISTANT_URL: where TailorBid's Interview Assistant button opens the app.

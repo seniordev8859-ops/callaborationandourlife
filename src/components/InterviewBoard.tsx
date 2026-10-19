@@ -24,7 +24,6 @@ import {
   calendarRange,
   calendarTime,
   monthTitle,
-  callerColor,
   deadlineLabel,
   fmtDay,
   fmtRequested,
