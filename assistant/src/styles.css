@@ -696,3 +696,6 @@ button.ghost.icon-button.danger-text:hover:not(:disabled) { color: var(--danger)
 .connect-card .callout { width: 100%; text-align: left; }
 .connect-mark { width: 44px; height: 44px; border-radius: 12px; }
 .connect-mark .icon { width: 24px; height: 24px; }
+
+/* A question the candidate answers in their own words (src/selfAnswer.js) */
+.self-answer { margin: 12px 0; font-size: 15px; }

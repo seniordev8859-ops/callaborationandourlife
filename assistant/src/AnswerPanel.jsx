@@ -126,6 +126,12 @@ export default function AnswerPanel({
       )}
       {!answer.question && <EmptyState />}
       {answer.question && <p className="asked">Q: {answer.question}</p>}
+      {answer.selfAnswer && (
+        <div className="callout self-answer">
+          <b>Answer this one in your own words.</b> The assistant doesn't suggest answers to questions about how you're
+          answering.
+        </div>
+      )}
       {/* Say this right away while the full answer loads. */}
       {answer.answering && answer.opener && !parsed.answer && (
         <p className="opener">

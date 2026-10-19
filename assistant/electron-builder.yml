@@ -13,6 +13,7 @@ files:
   - desktop/tray@2x.png
   - server/**
   - src/answerFormat.js
+  - src/selfAnswer.js
   - dist/**
 # Plain files instead of an asar archive: PowerShell runs the server's .ps1 scripts from their paths.
 asar: false

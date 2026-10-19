@@ -4,6 +4,7 @@ import { humanizeAnswer, parseAnswer, parseFileRefs, spokenAnswer } from './ques
 import { COMMON_QUESTIONS, matchCommonQuestion, openerFor } from './commonQuestions.js';
 import { translationTarget } from './Setup.jsx';
 import { useEvent } from './useEvent.js';
+import { asksAboutAnswering } from './selfAnswer.js';
 
 // Questions that are probably about the take-home project, worth an instant local code search.
 const PROJECT_HINT =
@@ -24,6 +25,7 @@ export function useAnswer({ settings, setError, onAnswer }) {
   const [isDraft, setIsDraft] = useState(false); // answer started before the question was finished
   const [opener, setOpener] = useState(''); // instant first words to say while the answer loads
   const [source, setSource] = useState('live'); // 'live' | 'prepared'
+  const [selfAnswer, setSelfAnswer] = useState(false); // a question the candidate answers in their own words
   const [history, setHistory] = useState([]); // [{ question, text }], newest first
   const [preparedStatus, setPreparedStatus] = useState(''); // '' | 'preparing' | 'ready'
   const prepared = useRef({}); // { [commonQuestionId]: answer text }
@@ -66,6 +68,23 @@ export function useAnswer({ settings, setError, onAnswer }) {
   // Resolves true once the whole answer is shown; false when it was replaced by a newer one or failed.
   const ask = useEvent(async (q, transcript, { key = q, draft = false } = {}) => {
     abort.current?.abort();
+    // About how the candidate is answering (AI, reading from a screen…): no suggestion, no request.
+    if (asksAboutAnswering(key) || asksAboutAnswering(q)) {
+      abort.current = null;
+      answerFor.current = { key, draft, commonId: null };
+      setSelfAnswer(true);
+      setIsDraft(draft);
+      setSource('live');
+      setOpener('');
+      setQuestion(q);
+      setText('');
+      setTranslation('');
+      setAnswering(false);
+      setFirstWordsMs(null);
+      newCodeTicket();
+      return true;
+    }
+    setSelfAnswer(false);
     const controller = new AbortController();
     abort.current = controller;
     // A draft started while the interviewer was still talking: the candidate may already be saying its
@@ -133,6 +152,7 @@ export function useAnswer({ settings, setError, onAnswer }) {
     if (!answer) return false;
     if (answerFor.current.commonId === common.id) return true; // already showing it
     abort.current?.abort();
+    setSelfAnswer(false);
     answerFor.current = { key: q, draft: false, commonId: common.id };
     setIsDraft(false);
     setSource('prepared');
@@ -186,6 +206,7 @@ export function useAnswer({ settings, setError, onAnswer }) {
 
   return {
     question,
+    selfAnswer,
     text,
     answering,
     translation,

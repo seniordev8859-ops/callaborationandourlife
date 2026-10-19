@@ -8,6 +8,7 @@ const projectAnalyzer = require('./projectAnalyzer.cjs');
 const tailorbid = require('./tailorbid.cjs');
 // Shared with the app, which runs it on live answers as they stream in.
 const { humanizeAnswer } = require('../src/answerFormat.js');
+const { asksAboutAnswering } = require('../src/selfAnswer.js');
 
 // Answer prompts always include the take-home project marked "Use in interview", if any.
 function answerMessages(args) {
@@ -227,6 +228,8 @@ async function readAnswerStream(stream, onDelta, idleMs = STREAM_IDLE_MS) {
 }
 
 async function answer(id, { question, transcript, opener = '', profile, earlier = [] }, { onDelta, onDone, onError }) {
+  // No suggestion for questions about how the candidate is answering (the app doesn't ask; this is a second check).
+  if (asksAboutAnswering(question)) return onDone();
   const controller = new AbortController();
   running.set(id, controller);
   try {
