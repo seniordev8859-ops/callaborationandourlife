@@ -49,6 +49,11 @@ export function AlertsProvider({ children }: { children: ReactNode }) {
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [ask, setAsk] = useState<(ConfirmInput & { resolve: (ok: boolean) => void }) | null>(null);
   const seq = useRef(0);
+  // The toast area is portaled to <body>, which only exists in the browser. Rendering it from the first render
+  // made the server's HTML differ from the browser's: React then re-rendered the whole page (hydration error),
+  // which also reset <html> and its theme class.
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
 
   const dismiss = useCallback((id: number) => setToasts((ts) => ts.filter((t) => t.id !== id)), []);
   const show = useCallback((t: ToastInput) => {
@@ -78,7 +83,7 @@ export function AlertsProvider({ children }: { children: ReactNode }) {
             }}
           />
         )}
-        {typeof document !== "undefined" &&
+        {mounted &&
           createPortal(
             <div aria-live="polite" className="pointer-events-none fixed right-4 bottom-4 z-[70] flex w-[calc(100vw-2rem)] max-w-sm flex-col gap-2">
               {toasts.map((t) => (

@@ -1,7 +1,9 @@
 // In-app notifications for events (models/Notice.ts). Sent next to the event's email, but always: they don't
-// depend on email being set up. Shown in the bell, as a toast when they arrive, and on Notifications.
+// depend on email being set up. Shown in the bell, as a toast when they arrive, and on Notifications, and pushed
+// to the browsers that turned Desktop alerts on (lib/push.ts), so they arrive even when TailorBid is closed.
 import type { Types } from "mongoose";
 import { Notice } from "./models/Notice";
+import { sendPush } from "./push";
 
 export type NoticeKind =
   | "interview-request"
@@ -20,7 +22,15 @@ export type NoticeKind =
   | "feedback-reply"
   | "milestone";
 export type NoticeTone = "info" | "success" | "warning" | "danger";
-export type NoticeInput = { kind: NoticeKind; tone?: NoticeTone; title: string; body?: string; url?: string };
+export type NoticeInput = {
+  kind: NoticeKind;
+  tone?: NoticeTone;
+  title: string;
+  body?: string;
+  url?: string;
+  /** Desktop notification tag: a newer one with the same tag replaces it (e.g. "interview-<id>"). */
+  tag?: string;
+};
 
 type Recipient = Types.ObjectId | string | { _id: Types.ObjectId | string };
 const idOf = (r: Recipient) => String(typeof r === "object" && "_id" in r ? r._id : r);
@@ -34,6 +44,7 @@ export async function notify(recipients: Recipient[], n: NoticeInput) {
       users.map((user) => ({ user, kind: n.kind, tone: n.tone ?? "info", title: n.title.slice(0, 200), body: (n.body ?? "").slice(0, 1000), url: n.url ?? "" })),
       { ordered: false }
     );
+    await sendPush(users, { title: n.title, body: n.body, url: n.url || "/notifications", tag: n.tag ?? `${n.kind}-${Date.now()}` });
   } catch (e) {
     console.error("in-app notification failed", e);
   }

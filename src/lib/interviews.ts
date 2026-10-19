@@ -101,6 +101,7 @@ function details(r: Loaded, tz: string): InterviewDetails {
 const link = (path: string, id: unknown) => `${appUrl()}${path}?id=${id}`;
 
 /* In-app notifications (lib/inbox.ts) next to each email: same people, a short line instead of the details. */
+const STARTING_SOON_MS = 15 * 60_000;
 const inApp = (path: string, id: unknown) => `${path}?id=${id}`;
 const what = (r: Loaded) => [r.company || "Interview", r.jobTitle].filter(Boolean).join(" · ");
 const forProfile = (r: Loaded) => r.profile?.label ?? r.profileLabel;
@@ -348,12 +349,31 @@ export async function runInterviewSweep(now = new Date()): Promise<SweepResult> 
     if (!r || r.status !== "scheduled") continue;
     await notify([c], {
       kind: "interview-reminder",
+      tag: `interview-${r._id}`,
       title: `Interview in ${lead < 60 ? `${lead} min` : `${Math.round(lead / 60)} h`}`,
       body: `${what(r)} for ${forProfile(r)} · ${fmtWhen(new Date(r.scheduledAt!), callerTimezone(c, site))}`,
       url: inApp("/caller/schedule", r._id),
     });
     await sendEmail(c.email, interviewReminderEmail({ name: c.name, minutes: lead, d: details(r, callerTimezone(c, site)), url: link("/caller/schedule", r._id) }));
     result.reminders++;
+  }
+
+  // 2a. Starting in 15 minutes → the caller, in the app and as a desktop notification (once per scheduled time).
+  const starting = soon.filter((s) => new Date(s.scheduledAt!).getTime() - now.getTime() <= STARTING_SOON_MS);
+  for (const s of starting) {
+    const c = callers.get(String(s.caller));
+    if (!c || !(await claim(`iv-soon:${s._id}:${new Date(s.scheduledAt!).getTime()}`, "interview-reminder"))) continue;
+    const r = await loadRequest(s._id);
+    if (!r || r.status !== "scheduled") continue;
+    const min = Math.max(1, Math.round((new Date(r.scheduledAt!).getTime() - now.getTime()) / 60_000));
+    await notify([c], {
+      kind: "interview-reminder",
+      tone: "warning",
+      tag: `interview-${r._id}`,
+      title: `Interview starts in ${min} min`,
+      body: `${what(r)} for ${forProfile(r)}. Open the Interview Assistant from TailorBid.`,
+      url: inApp("/caller/schedule", r._id),
+    });
   }
 
   // 2b. Result not reported an hour after the interview ended → remind the caller (once).

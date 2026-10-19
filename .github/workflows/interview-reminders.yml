@@ -1,0 +1,22 @@
+# Interview reminders on time (lib/interviews.ts runInterviewSweep): "starts in 15 minutes", reminders, overdue
+# requests, report reminders and tomorrow's schedule, as emails, in-app notifications and desktop pushes.
+# Vercel's free cron runs only once a day, so GitHub runs it every 5 minutes (GitHub may delay a run by a few minutes).
+name: Interview reminders
+
+on:
+  schedule:
+    - cron: "*/5 * * * *"
+  workflow_dispatch:
+
+jobs:
+  sweep:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Run the interview reminder sweep
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          curl --fail --silent --show-error --location --max-time 60 \
+            -H "Authorization: Bearer $CRON_SECRET" \
+            https://www.callaborationandourlife.com/api/cron/interviews

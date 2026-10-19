@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState, type MouseEvent } from "react";
+import { useEffect, useState, type MouseEvent } from "react";
 import ScreenshotUploader from "@/components/ScreenshotUploader";
 import Lightbox, { type Slide } from "@/components/Lightbox";
 import PostingLink from "@/components/PostingLink";
@@ -53,9 +53,9 @@ const MAX_BULK = 100;
 export default function ApplicationsPage() {
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
-  const [status, setStatus] = useState(() =>
-    typeof window === "undefined" ? "" : new URLSearchParams(window.location.search).get("status") ?? ""
-  );
+  const [status, setStatus] = useState("");
+  // ?status=… (e.g. from "Review & submit"): read after mounting, so the first render matches the server's HTML.
+  useEffect(() => setStatus(new URLSearchParams(window.location.search).get("status") ?? ""), []);
   const [profile, setProfile] = useState("");
   const [q, setQ] = useState("");
   const [page, setPage] = useState(1);

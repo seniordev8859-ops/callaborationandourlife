@@ -24,7 +24,7 @@ import { createContext, useCallback, useContext, useEffect, useRef, useState, ty
 import { createPortal } from "react-dom";
 import Lightbox from "./Lightbox";
 import { useToast } from "./Alerts";
-import { desktopNotify, desktopState, setDesktopAlerts } from "./desktopNotify";
+import { desktopNotify, desktopState, ensurePush, pushActive, setDesktopAlerts } from "./desktopNotify";
 import { api, fmtDate, fmtDateTime, Modal, type IconType } from "./ui";
 
 export type Note = {
@@ -141,7 +141,8 @@ export function NotificationProvider({ children, enabled = true }: { children: R
         // New while they work: a toast each (oldest first), with a button to open it.
         const fresh = unreadItems.filter((n) => !known.current!.has(n._id)).reverse();
         for (const n of fresh) {
-          desktopNotify({ title: n.title, body: n.body, tag: `note-${n._id}`, url: n.url || `/notifications?id=${n._id}` });
+          // Already shown by web push when this browser has it; otherwise the page shows it while open.
+          if (!pushActive()) desktopNotify({ title: n.title, body: n.body, tag: `note-${n._id}`, url: n.url || `/notifications?id=${n._id}` });
           toast({
             title: n.title,
             description: n.body,
@@ -158,6 +159,11 @@ export function NotificationProvider({ children, enabled = true }: { children: R
       /* signed out or offline: try again on the next poll */
     }
   }, [toast]);
+
+  // Desktop alerts turned on earlier: make sure this browser is still registered for web push.
+  useEffect(() => {
+    ensurePush();
+  }, []);
 
   useEffect(() => {
     if (!enabled) return; // bidders: no bell, pop-ups or polling
@@ -279,7 +285,7 @@ function DesktopAlertsSwitch() {
       <span className="min-w-0">
         <span className="block font-medium text-slate-900">Desktop alerts</span>
         <span className="block text-xs text-slate-500">
-          {state === "blocked" ? "Blocked in your browser's site settings." : "Interviews and new notifications, even when TailorBid is in the background."}
+          {state === "blocked" ? "Blocked in your browser's site settings." : "Interviews and new notifications, even when TailorBid is closed."}
         </span>
       </span>
       {state !== "blocked" && (
