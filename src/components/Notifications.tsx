@@ -24,6 +24,7 @@ import { createContext, useCallback, useContext, useEffect, useRef, useState, ty
 import { createPortal } from "react-dom";
 import Lightbox from "./Lightbox";
 import { useToast } from "./Alerts";
+import { desktopNotify, desktopState, setDesktopAlerts } from "./desktopNotify";
 import { api, fmtDate, fmtDateTime, Modal, type IconType } from "./ui";
 
 export type Note = {
@@ -139,7 +140,8 @@ export function NotificationProvider({ children, enabled = true }: { children: R
       } else {
         // New while they work: a toast each (oldest first), with a button to open it.
         const fresh = unreadItems.filter((n) => !known.current!.has(n._id)).reverse();
-        for (const n of fresh)
+        for (const n of fresh) {
+          desktopNotify({ title: n.title, body: n.body, tag: `note-${n._id}`, url: n.url || `/notifications?id=${n._id}` });
           toast({
             title: n.title,
             description: n.body,
@@ -148,6 +150,7 @@ export function NotificationProvider({ children, enabled = true }: { children: R
             duration: 8000,
             action: { label: n.url ? "Open" : "View", onClick: () => openRef.current(n) },
           });
+        }
         if (fresh.length) markPopped(fresh.map((n) => n._id));
       }
       known.current = new Set(r.items.map((n) => n._id));
@@ -266,6 +269,35 @@ function NoteModal({ n, onClose }: { n: Note; onClose: () => void }) {
   );
 }
 
+/** Turns desktop (Windows / macOS) notifications on or off for this browser; see desktopNotify.ts. */
+function DesktopAlertsSwitch() {
+  const [state, setState] = useState<ReturnType<typeof desktopState>>("off");
+  useEffect(() => setState(desktopState()), []);
+  if (state === "unsupported") return null;
+  return (
+    <div className="flex items-center justify-between gap-3 border-t border-slate-200 px-4 py-2.5 text-[13px]">
+      <span className="min-w-0">
+        <span className="block font-medium text-slate-900">Desktop alerts</span>
+        <span className="block text-xs text-slate-500">
+          {state === "blocked" ? "Blocked in your browser's site settings." : "Interviews and new notifications, even when TailorBid is in the background."}
+        </span>
+      </span>
+      {state !== "blocked" && (
+        <button
+          type="button"
+          role="switch"
+          aria-checked={state === "on"}
+          aria-label="Desktop alerts"
+          onClick={async () => setState(await setDesktopAlerts(state !== "on"))}
+          className={`relative h-5 w-9 shrink-0 cursor-pointer rounded-full transition-colors ${state === "on" ? "bg-indigo-600" : "bg-slate-300"}`}
+        >
+          <span className={`absolute top-0.5 size-4 rounded-full bg-white shadow transition-all ${state === "on" ? "left-[18px]" : "left-0.5"}`} />
+        </button>
+      )}
+    </div>
+  );
+}
+
 /** Bell with unread badge and a dropdown of recent notifications. */
 export function NotificationBell({ className = "" }: { className?: string }) {
   const { items, unread, open, markAll } = useNotifications();
@@ -367,6 +399,7 @@ export function NotificationBell({ className = "" }: { className?: string }) {
                 ))
               )}
             </div>
+            <DesktopAlertsSwitch />
             <Link
               href="/notifications"
               onClick={() => setShow(false)}

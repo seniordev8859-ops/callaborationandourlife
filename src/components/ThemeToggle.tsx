@@ -3,13 +3,7 @@
 import { useEffect, useState } from "react";
 
 import { THEME_STORAGE_KEY as KEY } from "@/lib/theme";
-
-export type ThemePref = "light" | "dark" | "system";
-
-function applyTheme(pref: ThemePref) {
-  const dark = pref === "dark" || (pref === "system" && window.matchMedia("(prefers-color-scheme: dark)").matches);
-  document.documentElement.classList.toggle("dark", dark);
-}
+import { applyTheme, readThemePref, type ThemePref } from "./ThemeKeeper";
 
 const Icon = {
   light: (
@@ -31,26 +25,12 @@ const Icon = {
   ),
 };
 
-/** Light / Dark / System segmented control. The choice persists per browser; System follows the OS live. */
+/** Light / Dark / System segmented control. The choice persists per browser; ThemeKeeper applies it on every page. */
 export default function ThemeToggle({ className = "", compact = false }: { className?: string; /** Icons only (narrow spots such as the account menu). */ compact?: boolean }) {
-  const [pref, setPref] = useState<ThemePref>("system");
+  // null until the saved choice is read: applying a default first flashed the wrong theme.
+  const [pref, setPref] = useState<ThemePref | null>(null);
 
-  useEffect(() => {
-    try {
-      setPref(((localStorage.getItem(KEY) as ThemePref) || "system") as ThemePref);
-    } catch {
-      /* storage unavailable */
-    }
-  }, []);
-
-  useEffect(() => {
-    applyTheme(pref);
-    if (pref !== "system") return;
-    const mq = window.matchMedia("(prefers-color-scheme: dark)");
-    const onChange = () => applyTheme("system");
-    mq.addEventListener("change", onChange);
-    return () => mq.removeEventListener("change", onChange);
-  }, [pref]);
+  useEffect(() => setPref(readThemePref()), []);
 
   const choose = (p: ThemePref) => {
     setPref(p);
@@ -59,6 +39,7 @@ export default function ThemeToggle({ className = "", compact = false }: { class
     } catch {
       /* storage unavailable */
     }
+    applyTheme(p);
   };
 
   return (

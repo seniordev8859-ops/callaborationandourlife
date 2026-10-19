@@ -47,6 +47,7 @@ import { DEFAULT_TZ, setHomeTz, setInterviewTz, zoneName } from "@/lib/viewerTz"
 import { NotificationBell, NotificationProvider } from "./Notifications";
 import { OnlineMenu, PresenceProvider } from "./Presence";
 import { AlertsProvider } from "./Alerts";
+import UpcomingInterviews from "./UpcomingInterviews";
 import { HelpButton } from "./HelpGuide";
 import type { IconType } from "./ui";
 
@@ -346,6 +347,7 @@ export default function AppShell({
           </header>
 
           <main className="min-w-0 flex-1 px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
+            <UpcomingInterviews role={role} />
             {mustChangePassword && pathname !== "/me" && (
               <div className="mx-auto mb-6 flex max-w-7xl flex-wrap items-center gap-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-2.5 text-sm text-amber-800">
                 <TriangleAlert className="size-4 shrink-0" />

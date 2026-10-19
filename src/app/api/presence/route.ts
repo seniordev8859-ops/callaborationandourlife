@@ -1,7 +1,8 @@
-import { NextResponse } from "next/server";
+import { after, NextResponse } from "next/server";
 import { quietHandler, requireUser } from "@/lib/auth";
 import { User } from "@/lib/models/User";
 import { presenceStatus, readIdle, recordPresence } from "@/lib/presence";
+import { maybeRunInterviewSweep } from "@/lib/interviews";
 
 // Both repeat every minute from every open tab: quietHandler keeps them out of the activity log.
 
@@ -18,9 +19,13 @@ export const GET = quietHandler(async () => {
   );
 });
 
-/** POST { idleMs } — heartbeat from an open TailorBid tab (see components/Presence.tsx). */
+/**
+ * POST { idleMs } — heartbeat from an open TailorBid tab (see components/Presence.tsx). Also runs the interview
+ * reminder sweep (at most once a minute overall), so reminders go out on time whenever anyone has TailorBid open.
+ */
 export const POST = quietHandler(async (req: Request) => {
   const user = await requireUser();
+  after(maybeRunInterviewSweep);
   await recordPresence(user._id, await readIdle(req));
   return NextResponse.json({ ok: true });
 });
