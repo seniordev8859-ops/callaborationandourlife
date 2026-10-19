@@ -104,8 +104,34 @@ test('matchCommonQuestion matches common questions and nothing else', () => {
 });
 
 test('openerFor always gives something to say', () => {
-  assert.match(openerFor('What is your biggest weakness?'), /good question/i);
+  assert.ok(openerFor('What is your biggest weakness?').length > 0);
   assert.ok(openerFor('Completely unexpected question').length > 0);
+});
+
+test('openerFor fits the kind of question', () => {
+  const pick = (q) => openerFor(q, [], () => 0); // the first choice of its pool
+  assert.match(pick('Tell me about yourself'), /^Sure/);
+  assert.match(pick('Tell me about a time you disagreed with a teammate'), /good one/);
+  assert.match(pick('What are your salary expectations?'), /^Sure\. So/);
+  assert.match(pick('Can you explain the difference between REST and GraphQL?'), /basically/);
+  assert.doesNotMatch(pick('What is your availability to start?'), /basically/);
+});
+
+test('openerFor never repeats a recent opener or the same first word twice in a row', () => {
+  const recent = [];
+  let seed = 7;
+  const random = () => (seed = (seed * 9301 + 49297) % 233280) / 233280;
+  const questions = ['Where are you based?', 'Why this role?', 'How did you handle on-call?', 'Any questions for us?'];
+  for (let i = 0; i < 40; i++) {
+    const opener = openerFor(questions[i % questions.length], recent.slice(-6), random);
+    assert.ok(!recent.slice(-6).includes(opener), `repeated "${opener}"`);
+    if (recent.length) {
+      const first = (s) => s.toLowerCase().match(/[a-z']+/)[0];
+      assert.notEqual(first(opener), first(recent.at(-1)), `"${recent.at(-1)}" then "${opener}"`);
+    }
+    recent.push(opener);
+  }
+  assert.ok(new Set(recent).size >= 10, 'openers vary over an interview');
 });
 
 test('draftDelay: no draft until the words ask something', () => {

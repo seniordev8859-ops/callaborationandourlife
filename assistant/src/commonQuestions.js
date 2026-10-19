@@ -80,25 +80,75 @@ export function matchCommonQuestion(text) {
   return COMMON_QUESTIONS.find((q) => q.pattern.test(t)) || null;
 }
 
-// A natural opener the candidate can say immediately while the full answer loads.
-// Buys a second or two the way people naturally do ("Yeah, good question. So…").
+// A natural opener the candidate can say immediately while the full answer loads, buying a second or two
+// the way people do. Several for each kind of question, and never the same one twice in a row: an
+// interviewer notices "Yeah, good question. So…" before every answer. They stay vague on purpose
+// ("Hmm, let me think…", never "Yes, I have…"): the answer isn't known yet when one is shown.
 const OPENERS = [
   [
-    /\b(tell|walk) (me|us) (a (little )?(bit )?)?(about|through) (yourself|your resume|your cv)|introduce yourself/,
-    'Yeah, sure. So…',
+    /\b(tell|walk) (me|us) (a (little )?(bit )?)?(about|through) (yourself|your resume|your cv|your background)|introduce yourself/,
+    ['Sure. So…', 'Yeah, of course. So…', 'Okay, so a bit about me…', 'Sure, happy to. So…', 'Yeah. So, quickly…'],
   ],
-  [/\bweakness/, "Hmm, good question. I'd say…"],
-  [/\bstrength/, "I'd say probably…"],
   [
-    /\btell (me|us) about a time|give (me|us) an example|describe a (time|situation)/,
-    'Yeah, let me think of a good one… So,',
+    /\bweakness/,
+    ['Hmm, honestly…', "That's a fair one. I'd say…", 'Okay, let me be honest here…', 'Hmm. For me, probably…'],
   ],
-  [/\bwhy\b/, 'Yeah, honestly…'],
-  [/\bhow would you|what would you/, "Good question. I think I'd…"],
-  [/\bany questions/, "Yeah, actually, I'd love to know…"],
+  [/\bstrength/, ["I'd say probably…", 'Hmm, I think…', 'Probably the biggest one is…', 'Okay, if I had to pick one…']],
+  [
+    /\btell (me|us) about a time|give (me|us) an example|describe a (time|situation)|walk (me|us) through (a|an|the)\b/,
+    [
+      'Yeah, let me think of a good one… So,',
+      'Hmm, okay, one that comes to mind…',
+      'Okay, so a good example would be…',
+      'Right, so there was this one time…',
+      'Mm, let me pick a good one…',
+    ],
+  ],
+  [
+    /\bany (other |more |final )?questions/,
+    ['Yeah, actually, I do…', 'Sure, a couple, actually…', 'Yeah, I was curious about…'],
+  ],
+  [/\bwhy\b/, ['Yeah, honestly…', 'Hmm, a few reasons, really…', 'Honestly, for me…', 'Good question, actually. So…']],
+  // Practical questions (salary, notice period, location, visa): short and plain.
+  [
+    /\b(salary|compensation|expectations?|notice period|availability|available to start|start date|relocat\w*|visa|sponsorship|based|located|citizen\w*)\b/,
+    ['Sure. So…', 'Okay, so…', 'Yeah, so…', 'Right, so…'],
+  ],
+  [
+    /\b(explain|difference between|how does .+ work|what (is|are) (a|an|the)\b|walk (me|us) through how)\b/,
+    ['Okay, so basically…', 'Right, so…', 'So, the way I see it…', 'Mm, so in short…', 'Sure. So basically…'],
+  ],
+  [
+    /\bhow (would|will|do|did) you|what would you|what do you do\b/,
+    ['So, usually…', 'Okay, so I think…', 'Hmm, so first…'],
+  ],
+];
+// For everything else.
+const GENERAL = [
+  'Hmm, okay…',
+  'Right, so…',
+  'Okay, so…',
+  'Mm, let me think…',
+  'Sure. So…',
+  'Yeah, so…',
+  'Okay, yeah…',
+  'Hmm, so…',
+  'Right. Well…',
+  "That's a good one. So…",
 ];
 
-export function openerFor(question) {
+const firstWord = (s) => s.toLowerCase().match(/[a-z']+/)?.[0] ?? '';
+
+/**
+ * An opener for `question` that wasn't used for any of the `recent` questions (newest last) and doesn't
+ * start with the same word as the last one. `random` is injectable for tests.
+ */
+export function openerFor(question, recent = [], random = Math.random) {
   const t = question.toLowerCase();
-  return OPENERS.find(([re]) => re.test(t))?.[1] || 'Yeah, good question. So…';
+  const pool = OPENERS.find(([re]) => re.test(t))?.[1] ?? [];
+  const last = recent.at(-1);
+  const fresh = (o) => !recent.includes(o) && (!last || firstWord(o) !== firstWord(last));
+  const choices = [...pool.filter(fresh), ...(pool.filter(fresh).length < 2 ? GENERAL.filter(fresh) : [])];
+  const list = choices.length ? choices : GENERAL.filter((o) => o !== last);
+  return list[Math.floor(random() * list.length)];
 }

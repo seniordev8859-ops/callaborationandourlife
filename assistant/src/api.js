@@ -160,8 +160,8 @@ export function onHotkey(cb) {
 
 // Streams an answer from the server; resolves with the full text.
 // `earlier`: spoken text of the last few answers in this interview, so the new one doesn't repeat them.
-export async function streamAnswer({ question, transcript, profile, earlier = [], signal, onDelta }) {
-  const res = await post('ai/answer', { question, transcript, profile, earlier }, { signal });
+export async function streamAnswer({ question, transcript, opener = '', profile, earlier = [], signal, onDelta }) {
+  const res = await post('ai/answer', { question, transcript, opener, profile, earlier }, { signal });
   if (!res.ok) {
     const data = await res.json().catch(() => ({}));
     throw new Error(data.error || `The server answered with an error (${res.status}).`);

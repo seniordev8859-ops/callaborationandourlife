@@ -174,7 +174,7 @@ const LENGTHS = {
 // `project` is a short brief of the candidate's take-home project (see projectAnalyzer.brief), or ''.
 // `earlier`: the last few answers already suggested in this interview (spoken text only), so the
 // new answer doesn't repeat them.
-function buildAnswerMessages({ question, transcript = '', profile = {}, project = '', earlier = [] }) {
+function buildAnswerMessages({ question, transcript = '', profile = {}, project = '', earlier = [], opener = '' }) {
   const {
     resume = '',
     jobDescription = '',
@@ -278,7 +278,15 @@ WHAT YOU ALREADY SAID (earlier answers in this interview; don't repeat these fac
 ${earlier.length ? earlier.map((a) => `- ${a.replace(/\s+/g, ' ').slice(0, 400)}`).join('\n') : '(nothing yet)'}
 
 THE INTERVIEWER'S TURN TO ANSWER NOW (may hold several questions; answer every one):
-${question}`;
+${question}${
+    opener
+      ? `
+
+THE CANDIDATE HAS ALREADY STARTED WITH: "${opener}"
+Continue right after these words, as one natural reply: don't repeat them, and don't start with another
+filler or a phrase like them ("Yeah, so", "Okay, so", "Good question", "Hmm"). Go straight into the content.`
+      : ''
+  }`;
 
   return [
     { role: 'system', content: system },

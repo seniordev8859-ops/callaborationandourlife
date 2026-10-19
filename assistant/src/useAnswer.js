@@ -32,6 +32,8 @@ export function useAnswer({ settings, setError, onAnswer }) {
   const abort = useRef(null);
   // What the current answer was written for: caption text, still-a-draft flag, common question id.
   const answerFor = useRef({ key: '', draft: false, commonId: null });
+  const recentOpeners = useRef([]); // openers already shown in this interview, newest last
+  const openerRef = useRef('');
 
   /* ---------- "Your code" panel (reads the project folder on this PC; nothing is sent anywhere) ---------- */
 
@@ -66,10 +68,16 @@ export function useAnswer({ settings, setError, onAnswer }) {
     abort.current?.abort();
     const controller = new AbortController();
     abort.current = controller;
+    // A draft started while the interviewer was still talking: the candidate may already be saying its
+    // opener, so the answer to the finished question keeps it. Otherwise a fresh one, unlike the last few.
+    const wasDraft = answerFor.current.draft && !answerFor.current.commonId;
+    const opener = wasDraft && openerRef.current ? openerRef.current : openerFor(key, recentOpeners.current);
+    if (opener !== openerRef.current) recentOpeners.current = [...recentOpeners.current, opener].slice(-6);
+    openerRef.current = opener;
     answerFor.current = { key, draft, commonId: null };
     setIsDraft(draft);
     setSource('live');
-    setOpener(openerFor(key));
+    setOpener(opener);
     setQuestion(q);
     setText('');
     setTranslation('');
@@ -85,6 +93,7 @@ export function useAnswer({ settings, setError, onAnswer }) {
       await streamAnswer({
         question: q,
         transcript,
+        opener,
         profile: settings.profile,
         // The last few answers (newest first), so the new one doesn't repeat them.
         earlier: history

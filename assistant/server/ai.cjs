@@ -229,12 +229,12 @@ async function readAnswerStream(stream, onDelta, idleMs = STREAM_IDLE_MS) {
   }
 }
 
-async function answer(id, { question, transcript, profile, earlier = [] }, { onDelta, onDone, onError }) {
+async function answer(id, { question, transcript, opener = '', profile, earlier = [] }, { onDelta, onDone, onError }) {
   const controller = new AbortController();
   running.set(id, controller);
   try {
     const { model, reasoningEffort, serviceTier } = settings.get();
-    const [system, user] = answerMessages({ question, transcript, profile, earlier });
+    const [system, user] = answerMessages({ question, transcript, opener, profile, earlier });
     // Responses API: the fast service tiers (priority, ultrafast) are only fully supported here.
     const stream = await createCached(
       {

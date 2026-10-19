@@ -22,3 +22,11 @@ test('the answer prompt keeps its output format for the app', () => {
   assert.match(system.content, /MOOD:/);
   assert.match(system.content, /MEANING:/);
 });
+
+test('the answer continues from the opener the candidate already said', () => {
+  const [, withOpener] = buildAnswerMessages({ question: 'Why this role?', opener: 'Hmm, a few reasons, really…' });
+  assert.match(withOpener.content, /ALREADY STARTED WITH: "Hmm, a few reasons, really…"/);
+  assert.match(withOpener.content, /don't repeat them/);
+  const [, without] = buildAnswerMessages({ question: 'Why this role?' });
+  assert.doesNotMatch(without.content, /ALREADY STARTED/);
+});
