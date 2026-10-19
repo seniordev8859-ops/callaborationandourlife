@@ -410,7 +410,9 @@ export async function jobDescriptionDocx(app: AppDocSource): Promise<Buffer> {
 
 /* ------------------------------------------------------------------- PDF */
 
-// Standard PDF fonts only support WinAnsi; normalise everything else.
+// Standard PDF fonts only support WinAnsi; normalise everything else. Tabs and line breaks become a space:
+// drawText can't encode them ("WinAnsi cannot encode … (0x000a)"), and a stray line break in a one-line field
+// (a title, a location, a date) made the whole download fail. Paragraphs are split on "\n" before this runs.
 function winAnsi(text: string) {
   return text
     .replace(/[‘’‛]/g, "'")
@@ -418,7 +420,8 @@ function winAnsi(text: string) {
     .replace(/[‐-―]/g, "-")
     .replace(/[●▪‣⁃]/g, "•")
     .replace(/ /g, " ")
-    .replace(/[^\x09\x0A\x0D\x20-\x7E¡-ÿ•…€™]/g, "");
+    .replace(/[\t\r\n]+/g, " ")
+    .replace(/[^\x20-\x7E¡-ÿ•…€™]/g, "");
 }
 
 const INK = rgb(0, 0, 0);
