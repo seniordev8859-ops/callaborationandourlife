@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { use, useEffect, useState, type ReactNode } from "react";
 import { useRole } from "@/components/AppShell";
+import { useConfirm, useToast } from "@/components/Alerts";
 import ResumeImport, { type ExtractedProfile, type ResumeReference } from "@/components/ResumeImport";
 import ModelInput from "@/components/ModelInput";
 import DesignPicker from "@/components/DesignPicker";
@@ -118,6 +119,8 @@ export default function ProfileEditor({ params }: { params: Promise<{ id: string
   const { id } = use(params);
   const isNew = id === "new";
   const router = useRouter();
+  const toast = useToast();
+  const confirm = useConfirm();
   const [form, setForm] = useState<Form>(EMPTY);
   const [savedManager, setSavedManager] = useState("");
   const isAdmin = useRole() === "admin";
@@ -131,7 +134,7 @@ export default function ProfileEditor({ params }: { params: Promise<{ id: string
   );
   const [loading, setLoading] = useState(!isNew);
   const [busy, setBusy] = useState(false);
-  const [msg, setMsg] = useState<{ kind: "error" | "success"; text: string } | null>(null);
+  const [error, setError] = useState("");
 
   useEffect(() => {
     if (isNew) return;
@@ -173,7 +176,7 @@ export default function ProfileEditor({ params }: { params: Promise<{ id: string
           education: (p.education ?? []).map((e) => ({ ...NEW_EDU, ...e })),
         });
       })
-      .catch((e) => setMsg({ kind: "error", text: e.message }))
+      .catch((e) => setError(e.message))
       .finally(() => setLoading(false));
   }, [id, isNew]);
 
@@ -185,7 +188,7 @@ export default function ProfileEditor({ params }: { params: Promise<{ id: string
   async function save(e: React.FormEvent) {
     e.preventDefault();
     setBusy(true);
-    setMsg(null);
+    setError("");
     const { info, manager, ...rest } = form;
     const body: Record<string, unknown> = {
       ...rest,
@@ -203,22 +206,31 @@ export default function ProfileEditor({ params }: { params: Promise<{ id: string
       } else {
         await api(`/api/admin/profiles/${id}`, { method: "PATCH", json: body });
         setSavedManager(manager);
-        setMsg({ kind: "success", text: "Profile saved" });
+        toast.success("Profile saved");
       }
     } catch (err) {
-      setMsg({ kind: "error", text: (err as Error).message });
+      setError((err as Error).message);
     } finally {
       setBusy(false);
     }
   }
 
   async function remove() {
-    if (!confirm("Delete this profile permanently?")) return;
+    if (
+      !(await confirm({
+        title: "Delete this profile?",
+        message: `${form.label ? `"${form.label}"` : "This profile"} will be deleted permanently. This cannot be undone.`,
+        confirmLabel: "Delete profile",
+        danger: true,
+      }))
+    )
+      return;
     try {
       await api(`/api/admin/profiles/${id}`, { method: "DELETE" });
+      toast.success(form.label ? `${form.label} deleted` : "Profile deleted");
       router.replace("/admin/profiles");
     } catch (err) {
-      setMsg({ kind: "error", text: (err as Error).message });
+      toast.error((err as Error).message);
     }
   }
 
@@ -330,7 +342,7 @@ export default function ProfileEditor({ params }: { params: Promise<{ id: string
         // The save bar is fixed at the bottom, so surface the first invalid field there too.
         const el = e.target as HTMLInputElement;
         const label = el.closest("div")?.querySelector("label")?.textContent?.replace(/\s*\*$/, "") || el.name || "a required field";
-        setMsg({ kind: "error", text: `Please fix "${label}": ${el.validationMessage}` });
+        setError(`Please fix "${label}": ${el.validationMessage}`);
         el.scrollIntoView({ behavior: "smooth", block: "center" });
       }}
       className="mx-auto max-w-5xl"
@@ -627,7 +639,7 @@ export default function ProfileEditor({ params }: { params: Promise<{ id: string
 
       <div className="popover sticky bottom-3 z-10 mt-6 flex flex-wrap items-center justify-end gap-x-3 gap-y-2 px-3 py-2.5 sm:bottom-4 sm:px-4">
         <div className="min-w-0 flex-1 basis-full empty:hidden sm:basis-0">
-          {msg && <Alert kind={msg.kind}>{msg.text}</Alert>}
+          {error && <Alert>{error}</Alert>}
         </div>
         <button className="btn btn-primary w-full sm:w-auto" disabled={busy}>
           {busy && <Spinner />} {isNew ? "Create profile" : "Save changes"}

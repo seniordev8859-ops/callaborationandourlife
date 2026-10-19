@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useRouter } from "next/navigation";
+import { useState, type MouseEvent } from "react";
 import ScreenshotUploader from "@/components/ScreenshotUploader";
 import Lightbox, { type Slide } from "@/components/Lightbox";
 import PostingLink from "@/components/PostingLink";
@@ -9,8 +10,10 @@ import ReadDot from "@/components/ReadDot";
 import { useColumns } from "@/components/ColumnPicker";
 import JobInfoDialog from "@/components/JobInfoDialog";
 import { useRole } from "@/components/AppShell";
+import { useConfirm, useToast } from "@/components/Alerts";
+import { ActionMenu, type ActionItem } from "@/components/ActionMenu";
 import { isUnknownCompany, isUntitledRole, missingJobInfo } from "@/lib/jobInfo";
-import { ArrowRight, CircleDollarSign, Clock, Download, ExternalLink, FileArchive, FileDown, FileText, Inbox, MapPin, Pencil, Plus, Search, Send, Trash2, X } from "lucide-react";
+import { ArrowRight, CircleDollarSign, Clock, Download, ExternalLink, Eye, FileArchive, FileDown, FileText, Inbox, MapPin, Pencil, Plus, Search, Send, Trash2, X } from "lucide-react";
 import { Alert, api, Badge, notGeneratedReason, DateRangeFilter, downloadFile, EmptyState, fmtStamp, money, PageHeader, Pagination, rangeParams, Section, Spinner, TableSkeleton, Stat, useAsync, usePageSize, limitParam, useClientPaging } from "@/components/ui";
 
 type Item = {
@@ -61,8 +64,9 @@ export default function ApplicationsPage() {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [bulk, setBulk] = useState("");
   const [viewer, setViewer] = useState<{ slides: Slide[]; start: number } | null>(null);
-  const [error, setError] = useState("");
-  const [notice, setNotice] = useState("");
+  const toast = useToast();
+  const confirm = useConfirm();
+  const router = useRouter();
   // Missing company / role: fill it in (opened from the row, or when Submit is refused).
   const [fixing, setFixing] = useState<{ a: Item; reason?: string } | null>(null);
   const role = useRole();
@@ -70,16 +74,14 @@ export default function ApplicationsPage() {
   const canDelete = role !== "bidder";
   const cols = useColumns("my-applications", [
     { key: "no", label: "No" },
-    { key: "generated", label: "Generate-Date" },
-    { key: "submitted", label: "Submit-Date" },
+    { key: "generated", label: "Generated" },
+    { key: "submitted", label: "Submitted" },
     { key: "profile", label: "Profile" },
     { key: "company", label: "Company" },
     { key: "role", label: "Role" },
     { key: "status", label: "Status" },
-    { key: "screenshot", label: "Screenshot" },
-    { key: "download", label: "Download" },
-    ...(canDelete ? [{ key: "delete", label: "Delete" }] : []),
-    { key: "other", label: "Other" },
+    { key: "screenshot", label: "Screenshots" },
+    { key: "other", label: "Fee" },
   ]);
 
   const profiles = useAsync(() => api<{ profiles: { id: string; label: string }[] }>("/api/profiles").then((r) => r.profiles), []);
@@ -113,11 +115,10 @@ export default function ApplicationsPage() {
 
   async function download(a: Item, format: "zip" | "resume-pdf") {
     setBusyId(`${a._id}:${format}`);
-    setError("");
     try {
       await downloadFile(`/api/applications/${a._id}/download${format === "zip" ? "" : "?format=resume-pdf"}`, format === "zip" ? "application.zip" : "resume.pdf");
     } catch (e) {
-      setError((e as Error).message);
+      toast.error("Download failed", (e as Error).message);
     } finally {
       setBusyId("");
     }
@@ -125,15 +126,14 @@ export default function ApplicationsPage() {
 
   async function downloadSelected(content: "resume" | "all") {
     const ids = downloadable.map((x) => x._id);
-    if (!selected.size) return setError("No resumes selected. Tick the applications you want to download, then try again.");
-    if (!ids.length) return setError("None of the selected applications have documents yet (not generated).");
-    if (ids.length > MAX_BULK) return setError(`Select ${MAX_BULK} applications or fewer per download.`);
+    if (!selected.size) return toast.warning("No resumes selected", "Tick the applications you want to download, then try again.");
+    if (!ids.length) return toast.warning("Nothing to download", "None of the selected applications have documents yet (not generated).");
+    if (ids.length > MAX_BULK) return toast.warning("Too many selected", `Select ${MAX_BULK} applications or fewer per download.`);
     setBulk(content);
-    setError("");
     try {
       await downloadFile("/api/applications/bulk-download", content === "resume" ? "resumes.zip" : "applications.zip", { ids, content });
     } catch (e) {
-      setError((e as Error).message);
+      toast.error("Download failed", (e as Error).message);
     } finally {
       setBulk("");
     }
@@ -148,7 +148,7 @@ export default function ApplicationsPage() {
     try {
       await api(`/api/applications/${a._id}/read`, { method: "POST", json: { read } });
     } catch (e) {
-      setError((e as Error).message);
+      toast.error((e as Error).message);
       list.reload();
     }
   }
@@ -157,40 +157,52 @@ export default function ApplicationsPage() {
     // No company / role yet: explain why it can't be submitted and let the bidder fill them in.
     const missing = missingJobInfo(a);
     if (missing) {
-      setError(missing);
+      toast.warning("Can't submit yet", missing);
       setFixing({ a, reason: missing });
       return;
     }
     setBusyId(a._id);
-    setError("");
     try {
       await api(`/api/applications/${a._id}`, { method: "PATCH", json: { status: "submitted" } });
+      toast.success("Application submitted", `${a.company} · ${a.jobTitle}`);
       list.reload();
     } catch (e) {
-      setError((e as Error).message);
+      toast.error((e as Error).message);
     } finally {
       setBusyId("");
     }
   }
 
   async function remove(a: Item) {
-    if (!confirm(`Remove "${a.company} / ${a.jobTitle}" from your list?`)) return;
+    const ok = await confirm({
+      title: "Delete this application?",
+      message: `"${a.company} / ${a.jobTitle}" is removed from your list.`,
+      confirmLabel: "Delete application",
+      danger: true,
+    });
+    if (!ok) return;
     try {
       await api(`/api/applications/${a._id}`, { method: "DELETE" });
       toggle(a._id, false);
+      toast.success("Application deleted", `${a.company} · ${a.jobTitle}`);
       list.reload();
     } catch (e) {
-      setError((e as Error).message);
+      toast.error((e as Error).message);
     }
   }
 
   async function removeSelected() {
     const paidIds = items.filter((x) => selected.has(x._id) && x.paid).map((x) => x._id);
     const ids = [...selected].filter((id) => !paidIds.includes(id));
-    if (!ids.length) return setError("Paid applications can't be deleted.");
-    if (!ids.length || !confirm(`Remove ${ids.length} application(s) from your list?`)) return;
+    if (!ids.length) return toast.warning("Paid applications can't be deleted.");
+    const ok = await confirm({
+      title: `Delete ${ids.length} application(s)?`,
+      message: `They are removed from your list.${paidIds.length ? ` ${paidIds.length} paid application(s) are kept.` : ""}`,
+      confirmLabel: "Delete applications",
+      danger: true,
+    });
+    if (!ok) return;
     setBulk("delete");
-    setError("");
     const failed: string[] = [];
     for (const id of ids) {
       try {
@@ -200,8 +212,9 @@ export default function ApplicationsPage() {
       }
     }
     setSelected(new Set([...failed, ...paidIds]));
-    if (paidIds.length) setError(`${paidIds.length} paid application(s) were kept: paid applications can't be deleted.`);
-    if (failed.length) setError(`${failed.length} application(s) could not be removed.`);
+    if (ids.length > failed.length) toast.success(`${ids.length - failed.length} application(s) deleted`);
+    if (paidIds.length) toast.warning(`${paidIds.length} paid application(s) were kept`, "Paid applications can't be deleted.");
+    if (failed.length) toast.error(`${failed.length} application(s) could not be removed.`);
     setBulk("");
     list.reload();
   }
@@ -312,7 +325,7 @@ export default function ApplicationsPage() {
     </div>
   );
 
-  const downloadButtons = (a: Item, notGenerated: boolean, className = "btn btn-ghost btn-sm") => (
+  const downloadButtons = (a: Item, notGenerated: boolean, className: string) => (
     <>
       <button className={className} onClick={() => download(a, "zip")} disabled={notGenerated || !!busyId} title={notGenerated ? "Generate it first" : "All documents (ZIP)"}>
         {busyId === `${a._id}:zip` ? <Spinner className="size-3.5" /> : <FileArchive />}
@@ -325,17 +338,33 @@ export default function ApplicationsPage() {
     </>
   );
 
-  const deleteButton = (a: Item, extra = "") => (
-    <button
-      className={`btn btn-ghost btn-sm text-rose-600 hover:bg-rose-50 hover:text-rose-700 ${extra}`}
-      onClick={() => remove(a)}
-      disabled={!!a.paid}
-      title={a.paid ? "Paid applications can't be deleted" : undefined}
-    >
-      <Trash2 />
-      Delete
-    </button>
+  const menuItems = (a: Item, notGenerated: boolean): ActionItem[] => [
+    { label: "Open", icon: Eye, onSelect: () => router.push(`/applications/${a._id}`) },
+    { label: "Download ZIP", icon: FileArchive, disabled: notGenerated || !!busyId, onSelect: () => download(a, "zip") },
+    { label: "Resume PDF", icon: FileDown, disabled: notGenerated || !!busyId, onSelect: () => download(a, "resume-pdf") },
+    ...(canDelete ? ["divider" as const, { label: a.paid ? "Paid: can't delete" : "Delete", icon: Trash2, danger: true, disabled: !!a.paid, onSelect: () => remove(a) }] : []),
+  ];
+
+  const actions = (a: Item, notGenerated: boolean) => (
+    <div className="flex items-center justify-end gap-1">
+      <button
+        className="btn btn-ghost btn-sm btn-icon"
+        onClick={() => download(a, "zip")}
+        disabled={notGenerated || !!busyId}
+        aria-label="Download all documents (ZIP)"
+        title={notGenerated ? "Generate it first" : "All documents (ZIP)"}
+      >
+        {busyId === `${a._id}:zip` ? <Spinner className="size-3.5" /> : <Download />}
+      </button>
+      <ActionMenu items={menuItems(a, notGenerated)} label={`More actions for ${a.company || "this application"}`} />
+    </div>
   );
+
+  // Clicking a row opens the application, unless the click was on a control inside it.
+  const openRow = (e: MouseEvent, a: Item) => {
+    if ((e.target as HTMLElement).closest("a, button, input, label, img")) return;
+    router.push(`/applications/${a._id}`);
+  };
 
   const feeCell = (a: Item, submitted: boolean) =>
     submitted ? (
@@ -409,18 +438,18 @@ export default function ApplicationsPage() {
               <thead>
                 <tr>
                   <th>Profile</th>
-                  <th className="text-right">Generated</th>
-                  <th className="text-right">Submitted</th>
-                  <th className="text-right">Fees</th>
+                  <th className="num">Generated</th>
+                  <th className="num">Submitted</th>
+                  <th className="num">Fees</th>
                 </tr>
               </thead>
               <tbody>
                 {byProfilePage.pageRows.map((b) => (
                   <tr key={b._id}>
                     <td className="min-w-[8rem] font-medium text-slate-900">{b.label}</td>
-                    <td className="text-right tabular-nums">{b.generated}</td>
-                    <td className="text-right tabular-nums">{b.submitted}</td>
-                    <td className="text-right whitespace-nowrap tabular-nums">{money(b.fees)}</td>
+                    <td className="num">{b.generated}</td>
+                    <td className="num">{b.submitted}</td>
+                    <td className="num">{money(b.fees)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -430,16 +459,6 @@ export default function ApplicationsPage() {
         </Section>
       )}
 
-      {error && (
-        <div className="mb-4">
-          <Alert>{error}</Alert>
-        </div>
-      )}
-      {notice && (
-        <div className="mb-4">
-          <Alert kind="success">{notice}</Alert>
-        </div>
-      )}
       {fixing && (
         <JobInfoDialog
           app={fixing.a}
@@ -448,8 +467,7 @@ export default function ApplicationsPage() {
           onClose={() => setFixing(null)}
           onSaved={(m) => {
             setFixing(null);
-            setError("");
-            setNotice(`${m} You can submit it now.`);
+            toast.success(m, "You can submit it now.");
             list.reload();
           }}
         />
@@ -563,11 +581,11 @@ export default function ApplicationsPage() {
                           </div>
                           <dl className="grid grid-cols-2 gap-x-3 gap-y-1.5 text-xs">
                             <div className="min-w-0">
-                              <dt className="text-slate-400">Generate-Date</dt>
+                              <dt className="text-slate-400">Generated</dt>
                               <dd className="font-mono text-slate-600">{fmtStamp(a.createdAt)}</dd>
                             </div>
                             <div className="min-w-0">
-                              <dt className="text-slate-400">Submit-Date</dt>
+                              <dt className="text-slate-400">Submitted</dt>
                               <dd className="font-mono text-slate-600">{a.submittedAt ? fmtStamp(a.submittedAt) : <span className="text-slate-400">—</span>}</dd>
                             </div>
                             <div className="min-w-0">
@@ -582,7 +600,11 @@ export default function ApplicationsPage() {
                           {screenshotCell(a, notGenerated)}
                           <div className="-ml-2 flex flex-wrap items-center gap-1">
                             {downloadButtons(a, notGenerated, "btn btn-ghost btn-sm h-8")}
-                            {canDelete && deleteButton(a, "h-8 ml-auto")}
+                            {canDelete && (
+                              <span className="ml-auto">
+                                <ActionMenu items={menuItems(a, notGenerated)} label={`More actions for ${a.company || "this application"}`} />
+                              </span>
+                            )}
                           </div>
                         </div>
                       </div>
@@ -606,17 +628,18 @@ export default function ApplicationsPage() {
                         onChange={(e) => items.forEach((x) => toggle(x._id, e.target.checked))}
                       />
                     </th>
-                    <th data-col="no" className="text-right">No</th>
-                    <th data-col="generated">Generate-Date</th>
-                    <th data-col="submitted">Submit-Date</th>
+                    <th data-col="no" className="num">No</th>
+                    <th data-col="generated">Generated</th>
+                    <th data-col="submitted">Submitted</th>
                     <th data-col="profile">Profile</th>
                     <th data-col="company">Company</th>
                     <th data-col="role">Role</th>
                     <th data-col="status">Status</th>
-                    <th data-col="screenshot">Screenshot</th>
-                    <th data-col="download">Download</th>
-                    {canDelete && <th data-col="delete">Delete</th>}
-                    <th data-col="other">Other</th>
+                    <th data-col="screenshot">Screenshots</th>
+                    <th data-col="other">Fee</th>
+                    <th className="actions">
+                      <span className="sr-only">Actions</span>
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
@@ -624,11 +647,11 @@ export default function ApplicationsPage() {
                     const notGenerated = a.status === "not_generated";
                     const submitted = a.status === "submitted";
                     return (
-                      <tr key={a._id} className={rowTint(a)}>
+                      <tr key={a._id} className={`cursor-pointer ${rowTint(a)}`} onClick={(e) => openRow(e, a)}>
                         <td>
                           <input type="checkbox" className="size-4 rounded align-middle" aria-label="Select application" checked={selected.has(a._id)} onChange={(e) => toggle(a._id, e.target.checked)} />
                         </td>
-                        <td data-col="no" className="text-right text-xs text-slate-400 tabular-nums">{offset + i + 1}</td>
+                        <td data-col="no" className="num text-xs text-slate-400">{offset + i + 1}</td>
                         <td data-col="generated" className="font-mono text-xs whitespace-nowrap text-slate-600">{fmtStamp(a.createdAt)}</td>
                         <td data-col="submitted" className="font-mono text-xs whitespace-nowrap text-slate-600">{a.submittedAt ? fmtStamp(a.submittedAt) : <span className="text-slate-400">—</span>}</td>
                         <td data-col="profile" className="whitespace-nowrap">{a.profile?.label ?? a.profileLabel ?? "—"}</td>
@@ -639,13 +662,10 @@ export default function ApplicationsPage() {
                           {notGenerated && notGeneratedLink(a)}
                         </td>
                         <td data-col="screenshot">{screenshotCell(a, notGenerated)}</td>
-                        <td data-col="download" className="whitespace-nowrap">
-                          <div className="-ml-2 flex gap-0.5">{downloadButtons(a, notGenerated)}</div>
-                        </td>
-                        {canDelete && <td data-col="delete">{deleteButton(a, "-ml-2")}</td>}
                         <td data-col="other" className="whitespace-nowrap">
                           {feeCell(a, submitted)}
                         </td>
+                        <td className="actions">{actions(a, notGenerated)}</td>
                       </tr>
                     );
                   })}

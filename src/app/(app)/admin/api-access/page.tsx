@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { Ban, Check, Copy, KeyRound, Plus, ShieldAlert, Terminal, Trash2 } from "lucide-react";
+import { useConfirm, useToast } from "@/components/Alerts";
 import { Alert, api, Badge, EmptyState, fmtDateTime, Modal, PageHeader, Section, Spinner, TableSkeleton, useAsync } from "@/components/ui";
 
 const CODE = "rounded border border-slate-200 bg-slate-50 px-1 py-px font-mono text-[12px] text-slate-800";
@@ -43,29 +44,37 @@ export default function ApiAccessPage() {
   const list = useAsync(() => api<{ keys: Key[] }>("/api/admin/access-keys").then((r) => r.keys), []);
   const [creating, setCreating] = useState(false);
   const [created, setCreated] = useState<{ name: string; key: string } | null>(null);
-  const [notice, setNotice] = useState("");
-  const [error, setError] = useState("");
+  const toast = useToast();
+  const confirm = useConfirm();
   const [origin, setOrigin] = useState("https://your-site");
   useEffect(() => setOrigin(window.location.origin), []);
 
   async function revoke(k: Key) {
-    if (!confirm(`Revoke "${k.name}"? Anything using this key stops working immediately.`)) return;
-    setError("");
+    if (
+      !(await confirm({
+        title: "Revoke this key?",
+        message: `Anything using "${k.name}" stops working immediately. This can't be undone.`,
+        confirmLabel: "Revoke key",
+        danger: true,
+      }))
+    )
+      return;
     try {
       await api(`/api/admin/access-keys/${k._id}`, { method: "DELETE" });
-      setNotice(`Revoked: ${k.name}.`);
+      toast.success(`${k.name} revoked`);
       list.reload();
     } catch (e) {
-      setError((e as Error).message);
+      toast.error("Couldn't revoke the key", (e as Error).message);
     }
   }
   async function purge(k: Key) {
-    if (!confirm(`Remove "${k.name}" from the list?`)) return;
+    if (!(await confirm({ title: "Remove this key?", message: `"${k.name}" is already revoked and will no longer be listed.`, confirmLabel: "Remove", danger: true }))) return;
     try {
       await api(`/api/admin/access-keys/${k._id}?purge=1`, { method: "DELETE" });
+      toast.success(`${k.name} removed`);
       list.reload();
     } catch (e) {
-      setError((e as Error).message);
+      toast.error("Couldn't remove the key", (e as Error).message);
     }
   }
 
@@ -83,14 +92,9 @@ export default function ApiAccessPage() {
           </button>
         }
       />
-      {notice && (
+      {list.error && (
         <div className="mb-4">
-          <Alert kind="success">{notice}</Alert>
-        </div>
-      )}
-      {error && (
-        <div className="mb-4">
-          <Alert>{error}</Alert>
+          <Alert>{list.error}</Alert>
         </div>
       )}
 
@@ -120,8 +124,10 @@ export default function ApiAccessPage() {
                 <th>Created</th>
                 <th>Expires</th>
                 <th>Last used</th>
-                <th className="text-right">Requests</th>
-                <th />
+                <th className="num">Requests</th>
+                <th className="actions">
+                  <span className="sr-only">Actions</span>
+                </th>
               </tr>
             </thead>
             <tbody>
@@ -147,8 +153,8 @@ export default function ApiAccessPage() {
                     {k.lastUsedAt ? fmtDateTime(k.lastUsedAt) : "Never"}
                     {k.lastUsedIp && <div className="font-mono text-[11px] text-slate-400">{k.lastUsedIp}</div>}
                   </td>
-                  <td className="text-right tabular-nums">{k.useCount}</td>
-                  <td className="text-right whitespace-nowrap">
+                  <td className="num">{k.useCount}</td>
+                  <td className="actions">
                     {k.revokedAt ? (
                       <button className="btn btn-ghost btn-sm" onClick={() => purge(k)}>
                         <Trash2 />
@@ -228,6 +234,7 @@ export default function ApiAccessPage() {
           onCreated={(c) => {
             setCreating(false);
             setCreated(c);
+            toast.success(`${c.name} created`);
             list.reload();
           }}
         />

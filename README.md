@@ -59,3 +59,7 @@ npm run dev
 6. Deploy. The admin account is also created automatically on first login if none exists.
 
 Generation runs up to 60 s (`maxDuration` in `api/applications/generate`). This works on Hobby and Pro plans.
+
+## Interview Assistant
+
+`assistant/` is the Interview Assistant: live suggested answers during interviews from Windows Live Captions. It runs on the user's Windows PC (not on Vercel; `.vercelignore` leaves it out) and connects to TailorBid from the **Interview Assistant** button: it loads the interview's resume and job description and uses TailorBid's OpenAI key through `/api/assistant/openai`. Interviews it records are saved to **Interview History** (`/interview-history`): admins see all of them, users and callers their own, bidders none. `npm run dev` starts it together with TailorBid (installing its packages the first time); `npm run dev:web` starts TailorBid alone, and `npm run assistant` the assistant alone. Its settings (`NEXT_PUBLIC_ASSISTANT_URL`, `ASSISTANT_*`) are in the same `.env.local`. See [assistant/README.md](assistant/README.md).

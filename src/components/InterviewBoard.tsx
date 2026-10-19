@@ -12,6 +12,7 @@ import {
   InterviewDetail,
   InterviewNotes,
   InterviewStatus,
+  noticeParts,
   ProfileTag,
   profileColor,
   registerProfiles,
@@ -31,11 +32,14 @@ import {
   useTick,
   type Interview,
 } from "./interviews";
-import { CalendarDays, CalendarX, CircleCheck, ClipboardCheck, Clock, Filter, Flag, Globe, Hourglass, UserPlus } from "lucide-react";
+import { CalendarDays, CalendarX, CircleCheck, ClipboardCheck, Clock, Eye, Filter, Flag, Globe, Hourglass, Sparkles, UserPlus } from "lucide-react";
 import { Alert, api, EmptyState, Modal, Spinner, useAsync, type IconType } from "./ui";
+import { useToast } from "./Alerts";
+import { PresenceDot } from "./Presence";
 import { DEFAULT_TZ, getHomeTz, getInterviewTz, setViewerTz, timeZoneChoices, tzDayKey } from "@/lib/viewerTz";
 import SearchSelect from "./SearchSelect";
 import ScheduleInterviewForm from "./ScheduleInterviewForm";
+import InterviewAssistant from "./InterviewAssistant";
 import { BoardView, ListView, ViewSwitch, columnOf, useViewMode, type ColumnKey, type DropTarget } from "./InterviewViews";
 
 type Options = {
@@ -71,12 +75,12 @@ export default function InterviewBoard({
   const [myRole, setMyRole] = useState("");
   const [view, setView] = useState<Interview | null>(null);
   const [dialog, setDialog] = useState<null | {
-    kind: "accept" | "reschedule" | "transfer" | "assign" | "cancel" | "report" | "edit" | "delete" | "feedback";
+    kind: "accept" | "reschedule" | "transfer" | "assign" | "cancel" | "report" | "edit" | "delete" | "feedback" | "assistant";
     i: Interview;
     day?: string;
   }>(null);
   const [mode, setMode] = useViewMode(as === "caller" ? "caller-schedule" : "admin-interviews");
-  const [notice, setNotice] = useState("");
+  const toast = useToast();
   const [listStatus, setListStatus] = useState<"" | ColumnKey>("");
   // Time zone the page shows times in: opens in your own zone from My Page (default GMT-04:00).
   // Back to your usual zone when you leave the page.
@@ -232,7 +236,7 @@ export default function InterviewBoard({
   const done = (msg: string) => {
     setDialog(null);
     setView(null);
-    setNotice(msg);
+    toast.success(...noticeParts(msg));
     reload();
   };
   // Parent created an interview (admin "Schedule interview").
@@ -270,8 +274,7 @@ export default function InterviewBoard({
       const r = await api<{ status: string }>(`/api/interviews/${i._id}`, { method: "PATCH", json: { action: "restore" } });
       done(`Restored: ${i.company} · ${i.profile?.label ?? i.profileLabel} (${r.status}).`);
     } catch (e) {
-      setNotice("");
-      alert((e as Error).message);
+      toast.error("Couldn't restore the interview", (e as Error).message);
     } finally {
       setRestoring(false);
     }
@@ -281,7 +284,7 @@ export default function InterviewBoard({
   const canEditTime = (i: Interview) => as === "staff" && myRole === "admin" && i.status === "scheduled" && !i.deletedAt;
   const onEditTime = async (i: Interview, at: Date) => {
     await api(`/api/interviews/${i._id}`, { method: "PATCH", json: { action: "reschedule", scheduledAt: at.toISOString() } });
-    setNotice(`${i.company}: time changed to ${fmtDay(at)} ${fmtTime(at)}. The caller and everyone responsible were emailed.`);
+    toast.success(`${i.company}: time changed to ${fmtDay(at)} ${fmtTime(at)}`, "The caller and everyone responsible were emailed.");
     reload();
   };
   const onDrop = (i: Interview, to: DropTarget) => {
@@ -293,8 +296,6 @@ export default function InterviewBoard({
 
   return (
     <div className="space-y-4">
-      {notice && <Alert kind="success">{notice}</Alert>}
-
       {kpis && (
         <div className="grid grid-cols-2 gap-4 md:grid-cols-3 xl:grid-cols-5">
           <Kpi label="Today" value={kpis.today} hint="interviews on the calendar" tone="indigo" icon="calendar" onClick={() => setMode("week")} />
@@ -425,7 +426,7 @@ export default function InterviewBoard({
                         <StepBar step={i.step} size="xs" />
                       </div>
                       <div className="mt-0.5 text-xs text-slate-500">
-                        {fmtRequested(i)} · {i.status === "open" ? <span className="text-indigo-700">open to all callers</span> : <>waiting for {i.caller?.name}</>} · requested by {i.requestedBy?.name}
+                        {fmtRequested(i)} · {i.status === "open" ? <span className="text-indigo-700">open to all callers</span> : <span className="inline-flex items-center gap-1">waiting for {i.caller?.name}{i.caller && <PresenceDot userId={i.caller._id} />}</span>} · requested by {i.requestedBy?.name}
                       </div>
                     </div>
                   </div>
@@ -570,12 +571,14 @@ export default function InterviewBoard({
                     <tr>
                       <th>Time</th>
                       <th>Step</th>
-                      <th>Caller (conducting)</th>
+                      <th>Caller</th>
                       <th>Profile</th>
-                      <th>Company / Role</th>
+                      <th>Company</th>
                       <th>Bidder</th>
                       <th>Status</th>
-                      <th />
+                      <th className="actions">
+                        <span className="sr-only">Actions</span>
+                      </th>
                     </tr>
                   </thead>
                   {agendaDays.map((g) => (
@@ -593,7 +596,7 @@ export default function InterviewBoard({
                         return (
                           <tr key={i._id} className="cursor-pointer" onClick={() => setView(i)}>
                             <td className="whitespace-nowrap">
-                              <div className="font-semibold text-slate-900 tabular-nums">{fmtTime(calendarTime(i))}</div>
+                              <div className="font-medium text-slate-900 tabular-nums">{fmtTime(calendarTime(i))}</div>
                               <div className="text-xs text-slate-500 tabular-nums">
                                 {i.durationMinutes} min{!booked && " · requested"}
                               </div>
@@ -605,6 +608,7 @@ export default function InterviewBoard({
                               <span className="flex items-center gap-2">
                                 <CallerAvatar caller={booked || i.status === "pending" ? i.caller : null} size={24} />
                                 {i.status === "open" ? <span className="text-indigo-700">Open to all</span> : (i.caller?.name ?? "—")}
+                                {as === "staff" && i.status !== "open" && i.caller && <PresenceDot userId={i.caller._id} />}
                               </span>
                             </td>
                             <td className="whitespace-nowrap">
@@ -614,19 +618,21 @@ export default function InterviewBoard({
                               <div className="font-medium text-slate-900">{i.company}</div>
                               <div className="text-xs text-slate-500">{i.jobTitle}</div>
                             </td>
-                            <td className="whitespace-nowrap text-slate-700">{i.requestedBy?.name}</td>
+                            <td className="whitespace-nowrap text-slate-600">{i.requestedBy?.name}</td>
                             <td>
                               <InterviewStatus i={i} />
                             </td>
-                            <td className="text-right">
+                            <td className="actions">
                               <button
-                                className="btn btn-ghost btn-sm"
+                                className="btn btn-ghost btn-sm btn-icon"
+                                aria-label={`Details for ${i.company}`}
+                                title="Details"
                                 onClick={(e) => {
                                   e.stopPropagation();
                                   setView(i);
                                 }}
                               >
-                                Details
+                                <Eye />
                               </button>
                             </td>
                           </tr>
@@ -662,6 +668,12 @@ export default function InterviewBoard({
             }}
           />
           <div className="mt-5 flex flex-wrap justify-end gap-2 border-t border-slate-200 pt-4 [&>button]:flex-1 sm:[&>button]:flex-none">
+            {!view.deletedAt && (
+              <button className="btn btn-secondary" onClick={() => setDialog({ kind: "assistant", i: view })}>
+                <Sparkles />
+                Interview Assistant
+              </button>
+            )}
             {as === "caller" && canAccept(view) && (
               <button className="btn btn-primary" onClick={() => setDialog({ kind: "accept", i: view })}>
                 {view.status === "open" ? "Accept" : "Accept & schedule"}
@@ -740,6 +752,7 @@ export default function InterviewBoard({
         </Modal>
       )}
       {dialog?.kind === "feedback" && <FeedbackDialog i={dialog.i} onClose={() => setDialog(null)} onDone={done} />}
+      {dialog?.kind === "assistant" && <InterviewAssistant interview={dialog.i} onClose={() => setDialog(null)} />}
       {dialog?.kind === "delete" && <DeleteDialog i={dialog.i} onClose={() => setDialog(null)} onDone={done} />}
       {dialog?.kind === "assign" && <AssignDialog i={dialog.i} callers={options.data?.callers ?? []} onClose={() => setDialog(null)} onDone={done} />}
     </div>

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Calendar, CalendarDays, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, ChevronsUpDown, Clock, CornerDownRight, List, Play, Search, SearchX, SquareKanban } from "lucide-react";
+import { ArrowDown, ArrowUp, Calendar, CalendarDays, ChevronLeft, ChevronRight, Clock, CornerDownRight, List, Play, Search, SearchX, SquareKanban } from "lucide-react";
 import {
   CallerAvatar,
   LockBadge,
@@ -20,6 +20,7 @@ import {
   type Interview,
 } from "./interviews";
 import { EmptyState, useClientPaging } from "./ui";
+import { PresenceDot } from "./Presence";
 import { fromWallTime, tzDayKey } from "@/lib/viewerTz";
 
 /* ------------------------------------------------------------ view switch */
@@ -408,27 +409,22 @@ export function ListView({ items, onOpen, initialStatus = "" }: { items: Intervi
   }, [items, q, status, sort]);
   const { pageRows, pager } = useClientPaging(rows, "interviews-list");
 
-  const th = (key: SortKey, label: string) => (
-    <th>
-      <button
-        type="button"
-        className="inline-flex cursor-pointer items-center gap-1 transition-colors hover:text-slate-900"
-        onClick={() => setSort((s) => ({ key, dir: s.key === key ? (s.dir === 1 ? -1 : 1) : 1 }))}
-        aria-sort={sort.key === key ? (sort.dir === 1 ? "ascending" : "descending") : undefined}
-      >
-        {label}
-        {sort.key === key ? (
-          sort.dir === 1 ? (
-            <ChevronUp className="size-3.5 text-slate-700" aria-hidden />
-          ) : (
-            <ChevronDown className="size-3.5 text-slate-700" aria-hidden />
-          )
-        ) : (
-          <ChevronsUpDown className="size-3 text-slate-300" aria-hidden />
-        )}
-      </button>
-    </th>
-  );
+  const th = (key: SortKey, label: string) => {
+    const active = sort.key === key;
+    const Icon = sort.dir === 1 ? ArrowUp : ArrowDown;
+    return (
+      <th aria-sort={active ? (sort.dir === 1 ? "ascending" : "descending") : "none"}>
+        <button
+          type="button"
+          className={`inline-flex cursor-pointer items-center gap-1 transition-colors hover:text-slate-900 ${active ? "text-slate-900" : ""}`}
+          onClick={() => setSort((s) => ({ key, dir: s.key === key ? (s.dir === 1 ? -1 : 1) : 1 }))}
+        >
+          {label}
+          {active && <Icon className="size-3" aria-hidden />}
+        </button>
+      </th>
+    );
+  };
 
   return (
     <div>
@@ -464,9 +460,9 @@ export function ListView({ items, onOpen, initialStatus = "" }: { items: Intervi
                   {th("status", "Status")}
                   {th("caller", "Caller")}
                   {th("profile", "Profile")}
-                  {th("company", "Company / Role")}
+                  {th("company", "Company")}
                   {th("bidder", "Bidder")}
-                  <th>Deadline / Result</th>
+                  <th>Deadline</th>
                 </tr>
               </thead>
               <tbody>
@@ -495,6 +491,7 @@ export function ListView({ items, onOpen, initialStatus = "" }: { items: Intervi
                         <span className="flex items-center gap-1.5">
                           <span className={`size-2.5 rounded-full ${i.caller ? callerColor(i.caller._id) : "border border-slate-400"}`} />
                           {i.status === "open" ? <span className="text-indigo-700">Any caller</span> : (i.caller?.name ?? "—")}
+                          {i.status !== "open" && i.caller && <PresenceDot userId={i.caller._id} />}
                         </span>
                       </td>
                       <td className="whitespace-nowrap">
@@ -504,7 +501,7 @@ export function ListView({ items, onOpen, initialStatus = "" }: { items: Intervi
                         <div className="font-medium text-slate-900">{i.company}</div>
                         <div className="text-xs text-slate-500">{i.jobTitle}</div>
                       </td>
-                      <td className="whitespace-nowrap text-slate-700">{i.requestedBy?.name}</td>
+                      <td className="whitespace-nowrap text-slate-600">{i.requestedBy?.name}</td>
                       <td className="text-xs whitespace-nowrap">
                         {dl ? (
                           <span className={dl.late ? "font-medium text-rose-600" : "text-amber-700"}>{dl.text}</span>

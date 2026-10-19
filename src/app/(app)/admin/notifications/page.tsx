@@ -5,6 +5,7 @@ import { useSearchParams } from "next/navigation";
 import { ScreenshotDrop } from "@/components/interviews";
 import { ROLE_LABEL, type Role } from "@/components/Accounts";
 import { NoteBody } from "@/components/Notifications";
+import { useConfirm, useToast } from "@/components/Alerts";
 import { Bell, Check, Mail, Plus, Search, Send, Trash2, Users, X } from "lucide-react";
 import { Alert, api, Badge, EmptyState, fmtDateTime, Modal, PageHeader, Spinner, TableSkeleton, useAsync, useClientPaging } from "@/components/ui";
 
@@ -42,7 +43,7 @@ function AdminNotifications() {
   const accounts = useAsync(() => api<{ users: Account[] }>("/api/admin/users").then((r) => r.users.filter((u) => u.status === "approved")), []);
   const sent = useAsync(() => api<{ messages: Sent[] }>("/api/admin/messages").then((r) => r.messages), []);
   const [detail, setDetail] = useState<Sent | null>(null);
-  const [notice, setNotice] = useState("");
+  const toast = useToast();
   const { pageRows, pager } = useClientPaging(sent.data ?? [], "admin-notifications");
 
   return (
@@ -57,9 +58,9 @@ function AdminNotifications() {
           </button>
         }
       />
-      {notice && (
+      {sent.error && (
         <div className="mb-4">
-          <Alert kind="success">{notice}</Alert>
+          <Alert>{sent.error}</Alert>
         </div>
       )}
       {composing && (
@@ -69,7 +70,7 @@ function AdminNotifications() {
             onCancel={() => setComposing(false)}
             onSent={(msg) => {
               setComposing(false);
-              setNotice(msg);
+              toast.success("Notification sent", msg);
               sent.reload();
             }}
           />
@@ -110,7 +111,7 @@ function AdminNotifications() {
                   <th>Title</th>
                   <th>To</th>
                   <th>Delivery</th>
-                  <th>Read</th>
+                  <th>Read by</th>
                 </tr>
               </thead>
               <tbody>
@@ -160,7 +161,7 @@ function AdminNotifications() {
           onClose={() => setDetail(null)}
           onDeleted={() => {
             setDetail(null);
-            setNotice("Notification deleted.");
+            toast.success("Notification deleted");
             sent.reload();
           }}
         />
@@ -340,9 +341,32 @@ function DetailModal({ m, onClose, onDeleted }: { m: Sent; onClose: () => void; 
   const [filter, setFilter] = useState<"all" | "read" | "unread">("all");
   const rows = (detail.data?.recipients ?? []).filter((r) => filter === "all" || (filter === "read" ? r.readAt : !r.readAt));
   const read = (detail.data?.recipients ?? []).filter((r) => r.readAt).length;
+  const toast = useToast();
+  const confirm = useConfirm();
+  const [deleting, setDeleting] = useState(false);
+
+  async function remove() {
+    if (
+      !(await confirm({
+        title: "Delete this notification?",
+        message: "It is removed from everyone's bell, including people who haven't read it yet.",
+        confirmLabel: "Delete notification",
+        danger: true,
+      }))
+    )
+      return;
+    setDeleting(true);
+    try {
+      await api(`/api/admin/messages/${m._id}`, { method: "DELETE" });
+      onDeleted();
+    } catch (e) {
+      toast.error("Couldn't delete the notification", (e as Error).message);
+      setDeleting(false);
+    }
+  }
   return (
     <Modal open wide onClose={onClose} title={m.title}>
-      <NoteBody n={{ ...m, read: true }} />
+      <NoteBody n={{ ...m, read: true, kind: "message", tone: "info", url: "" }} />
       <div className="mt-6 mb-3 flex flex-wrap items-center justify-between gap-2 border-t border-slate-200 pt-5">
         <div className="text-sm font-semibold text-slate-900 tabular-nums">
           Read by {read} of {detail.data?.recipients.length ?? m.recipients}
@@ -393,15 +417,8 @@ function DetailModal({ m, onClose, onDeleted }: { m: Sent; onClose: () => void; 
         </div>
       )}
       <div className="mt-4 flex justify-end">
-        <button
-          className="btn btn-ghost text-rose-600 hover:bg-rose-50 hover:text-rose-700"
-          onClick={async () => {
-            if (!confirm("Delete this notification for everyone?")) return;
-            await api(`/api/admin/messages/${m._id}`, { method: "DELETE" });
-            onDeleted();
-          }}
-        >
-          <Trash2 />
+        <button className="btn btn-ghost text-rose-600 hover:bg-rose-50 hover:text-rose-700" disabled={deleting} onClick={remove}>
+          {deleting ? <Spinner /> : <Trash2 />}
           Delete notification
         </button>
       </div>

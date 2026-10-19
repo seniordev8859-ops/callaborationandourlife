@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Check, ChevronLeft, ChevronRight, Download, ExternalLink, FileArchive, FileText, ImagePlus, Lock, MessageSquare, Plus, Video, X } from "lucide-react";
 import Lightbox, { type Slide } from "./Lightbox";
 import { Alert, api, Badge, downloadFile, Modal, Spinner, useAsync } from "./ui";
+import { useToast } from "./Alerts";
 import { fromTzInput, fromWallTime, toTzInput, tzAbbr, tzDayKey, tzParts } from "@/lib/viewerTz";
 
 /* ------------------------------------------------------------------ types */
@@ -309,15 +310,14 @@ const ACTION_LABEL: Record<string, string> = {
 /** Resume + job description of the application the interview is for (downloadable by the caller). */
 export function Materials({ i }: { i: Interview }) {
   const [busy, setBusy] = useState("");
-  const [error, setError] = useState("");
+  const toast = useToast();
   if (!i.application) return null;
   const get = async (type: string, fallback: string) => {
     setBusy(type);
-    setError("");
     try {
       await downloadFile(`/api/interviews/${i._id}/documents?type=${type}`, fallback);
     } catch (e) {
-      setError((e as Error).message);
+      toast.error("Download failed", (e as Error).message);
     } finally {
       setBusy("");
     }
@@ -348,10 +348,16 @@ export function Materials({ i }: { i: Interview }) {
           {btn("jd", "Job description", "job-description.docx")}
           {btn("zip", "All documents (ZIP)", "application.zip")}
         </div>
-        {error && <div className="mt-2 text-xs text-rose-600">{error}</div>}
       </div>
     </div>
   );
+}
+
+/** A dialog's "Done. Who was emailed." message as a toast title and description. */
+export function noticeParts(msg: string): [string, string?] {
+  const k = msg.indexOf(". ");
+  if (k < 0) return [msg.replace(/\.$/, "")];
+  return [msg.slice(0, k), msg.slice(k + 2)];
 }
 
 export function InterviewDetail({ i }: { i: Interview }) {

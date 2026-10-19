@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useMemo, useState } from "react";
+import { useToast } from "@/components/Alerts";
 import { Eye, RotateCcw, Save, Search } from "lucide-react";
 import { Alert, api, Badge, PageHeader, Segmented, Spinner, PageSkeleton, useAsync, useClientPaging } from "@/components/ui";
 
@@ -183,7 +184,7 @@ function ProfileAssignments({ data, profileId, onSaved }: { data: Data; profileI
   const [selU, setSelU] = useState(initialU);
   const [selC, setSelC] = useState(initialC);
   const [busy, setBusy] = useState(false);
-  const [msg, setMsg] = useState<{ kind: "error" | "success"; text: string } | null>(null);
+  const toast = useToast();
 
   const same = (a: Set<string>, b: Set<string>) => a.size === b.size && [...a].every((x) => b.has(x));
   const dirty = !same(selB, initialB) || !same(selC, initialC) || (data.canManageUsers && !same(selU, initialU));
@@ -201,16 +202,15 @@ function ProfileAssignments({ data, profileId, onSaved }: { data: Data; profileI
 
   async function save() {
     setBusy(true);
-    setMsg(null);
     try {
       await api("/api/admin/assignments", {
         method: "PUT",
         json: { profileId, bidders: [...selB], callers: [...selC], ...(data.canManageUsers ? { users: [...selU] } : {}) },
       });
-      setMsg({ kind: "success", text: `Assignments saved for ${profile.label}.` });
+      toast.success("Assignments saved", profile.label);
       onSaved();
     } catch (e) {
-      setMsg({ kind: "error", text: (e as Error).message });
+      toast.error((e as Error).message);
     } finally {
       setBusy(false);
     }
@@ -242,7 +242,6 @@ function ProfileAssignments({ data, profileId, onSaved }: { data: Data; profileI
           </button>
         </div>
       </div>
-      {msg && <Alert kind={msg.kind}>{msg.text}</Alert>}
       {!profile.active && <Alert kind="info">This profile is inactive. Assigned bidders cannot generate with it until it is activated.</Alert>}
 
       <div className={`grid gap-4 ${data.canManageUsers ? "xl:grid-cols-2" : ""}`}>
@@ -304,12 +303,11 @@ function Matrix({ data, onSaved }: { data: Data; onSaved: () => void }) {
   const { pageRows: profileRows, pager } = useClientPaging(data.profiles, "assignments-matrix");
   const cols = data.accounts.filter((a) => data.canManageUsers || a.role === "bidder" || a.role === "caller").sort((x, y) => rank[x.role] - rank[y.role]);
   const [pending, setPending] = useState("");
-  const [error, setError] = useState("");
+  const toast = useToast();
 
   async function flip(p: P, a: A) {
     const key = `${p.id}:${a.id}`;
     setPending(key);
-    setError("");
     const members = (role: "bidder" | "caller" | "user") =>
       data.accounts
         .filter((x) =>
@@ -329,7 +327,7 @@ function Matrix({ data, onSaved }: { data: Data; onSaved: () => void }) {
       });
       onSaved();
     } catch (e) {
-      setError((e as Error).message);
+      toast.error((e as Error).message);
     } finally {
       setPending("");
     }
@@ -338,7 +336,6 @@ function Matrix({ data, onSaved }: { data: Data; onSaved: () => void }) {
   if (!cols.length) return <Alert kind="info">No bidders yet.</Alert>;
   return (
     <div className="space-y-3">
-      {error && <Alert>{error}</Alert>}
       <div className="card overflow-auto p-0">
         <table className="text-[13px]">
           <thead>

@@ -1,7 +1,9 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useToast } from "@/components/Alerts";
 import { ArrowRight, CircleCheck, Link2, ListChecks, Pause, Play, RefreshCw, Sparkles, Square, X } from "lucide-react";
 import { Alert, api, ApiError, Badge, EmptyState, PageHeader, Spinner, useAsync, useClientPaging } from "@/components/ui";
 
@@ -90,6 +92,8 @@ export default function ImportPage() {
   const [profileId, setProfileId] = useState("");
   const [rows, setRows] = useState<Row[]>([]);
   const [notice, setNotice] = useState("");
+  const toast = useToast();
+  const router = useRouter();
   const [running, setRunning] = useState(false);
   const [paused, setPaused] = useState(false);
   const pausedRef = useRef(false);
@@ -194,6 +198,17 @@ export default function ImportPage() {
     // Anything left over: quota reached or cancelled.
     for (const n of queue) setRow(n, { state: "stopped", message: quotaHit ? "Monthly quota reached for this profile" : "Cancelled" });
     setRunning(false);
+    const done = rowsRef.current.filter((r) => r.state === "done").length;
+    const notGenerated = rowsRef.current.filter((r) => r.state === "not_generated").length;
+    if (quotaHit) toast.warning("Monthly quota reached", "The remaining job URLs were not run.");
+    if (done)
+      toast({
+        title: `${done} application${done === 1 ? "" : "s"} generated`,
+        description: notGenerated ? `${notGenerated} saved as not generated: add their job descriptions.` : undefined,
+        tone: "success",
+        action: { label: "Review & submit", onClick: () => router.push("/applications?status=generated") },
+      });
+    else if (notGenerated) toast.warning(`${notGenerated} saved as not generated`, "Add their job descriptions in View Generated Resumes.");
     manual.reload();
     setPaused(false);
     profiles.reload();
@@ -433,9 +448,9 @@ export default function ImportPage() {
                   <table className="table">
                     <thead>
                       <tr>
-                        <th className="w-10">#</th>
+                        <th className="num w-10">#</th>
                         <th>Job URL</th>
-                        <th>Company / Role</th>
+                        <th>Job</th>
                         <th>Status</th>
                       </tr>
                     </thead>
@@ -451,7 +466,7 @@ export default function ImportPage() {
                         }
                         return (
                           <tr key={r.n} className={r.state === "running" ? "bg-indigo-50" : ""}>
-                            <td className="font-mono text-xs text-slate-400 tabular-nums">{r.n}</td>
+                            <td className="num text-xs text-slate-400">{r.n}</td>
                             <td className="max-w-72 min-w-[10rem]">
                               <a href={r.url} target="_blank" rel="noreferrer" className="block truncate font-mono text-xs text-indigo-600 hover:underline" title={r.url}>
                                 {host}

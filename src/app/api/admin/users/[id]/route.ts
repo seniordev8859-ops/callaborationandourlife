@@ -152,7 +152,7 @@ export const PATCH = handler(async (req: Request, { params }: Ctx) => {
   }
   const statusChanged = user.isModified("status");
   await user.save();
-  if (statusChanged) await notifyUserStatus(user.name, user.email, user.status);
+  if (statusChanged) await notifyUserStatus(user.name, user.email, user.status, user._id);
   const afterState = await snapshotAccounts([user._id]);
   after(() => notifyAssignmentChanges([before], afterState, actor));
   return NextResponse.json({ ok: true });

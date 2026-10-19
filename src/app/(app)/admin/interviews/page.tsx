@@ -1,17 +1,21 @@
 "use client";
 
 import { Suspense, useState } from "react";
-import { MessageSquare, Plus } from "lucide-react";
+import { MessageSquare, Plus, Sparkles } from "lucide-react";
+import InterviewAssistant from "@/components/InterviewAssistant";
 import InterviewBoard from "@/components/InterviewBoard";
 import ScheduleInterviewForm from "@/components/ScheduleInterviewForm";
 import SendCallerMessage from "@/components/SendCallerMessage";
-import { Alert, Modal, PageHeader } from "@/components/ui";
+import { useToast } from "@/components/Alerts";
+import { noticeParts } from "@/components/interviews";
+import { Modal, PageHeader } from "@/components/ui";
 
 export default function Page() {
   // Admins schedule for any caller; profile managers for the callers assigned to their profiles.
   const [creating, setCreating] = useState<{ day?: string } | null>(null);
-  const [notice, setNotice] = useState("");
+  const toast = useToast();
   const [messaging, setMessaging] = useState(false);
+  const [assistant, setAssistant] = useState(false);
   const [version, setVersion] = useState(0);
   return (
     <div className="mx-auto max-w-7xl">
@@ -20,6 +24,10 @@ export default function Page() {
         subtitle="Every interview request and schedule for your profiles: who is conducting each interview and when, and which requests still need a caller."
         actions={
           <>
+            <button className="btn btn-secondary" onClick={() => setAssistant(true)}>
+              <Sparkles />
+              Interview Assistant
+            </button>
             <button className="btn btn-secondary" onClick={() => setMessaging(true)}>
               <MessageSquare />
               Send message
@@ -31,11 +39,6 @@ export default function Page() {
           </>
         }
       />
-      {notice && (
-        <div className="mb-4">
-          <Alert kind="success">{notice}</Alert>
-        </div>
-      )}
       {creating && (
         <Modal open wide onClose={() => setCreating(null)} title="Schedule an interview">
           <ScheduleInterviewForm
@@ -43,7 +46,7 @@ export default function Page() {
             onCancel={() => setCreating(null)}
             onDone={(msg) => {
               setCreating(null);
-              setNotice(msg);
+              toast.success(...noticeParts(msg));
               setVersion((v) => v + 1);
             }}
           />
@@ -55,11 +58,12 @@ export default function Page() {
             onCancel={() => setMessaging(false)}
             onDone={(msg) => {
               setMessaging(false);
-              setNotice(msg);
+              toast.success(...noticeParts(msg));
             }}
           />
         </Modal>
       )}
+      {assistant && <InterviewAssistant onClose={() => setAssistant(false)} />}
       <Suspense>
         <InterviewBoard as="staff" reloadSignal={version} onAddDay={(day) => setCreating({ day })} />
       </Suspense>

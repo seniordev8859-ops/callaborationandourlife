@@ -11,15 +11,19 @@ export async function proxy(req: NextRequest) {
     url.searchParams.set("next", pathname);
     return NextResponse.redirect(url);
   }
-  const adminOnly = pathname.startsWith("/admin/settings") || pathname.startsWith("/admin/keys") || pathname.startsWith("/admin/notifications") || pathname.startsWith("/admin/feedback") || pathname.startsWith("/admin/logs") || pathname.startsWith("/admin/prompt-test") || pathname.startsWith("/admin/api-access");
+  const adminOnly = pathname.startsWith("/admin/settings") || pathname.startsWith("/admin/keys") || pathname.startsWith("/admin/notifications") || pathname.startsWith("/admin/feedback") || pathname.startsWith("/admin/logs") || pathname.startsWith("/admin/prompt-test") || pathname.startsWith("/admin/api-access") || pathname.startsWith("/admin/work-time");
   const staff = session.role === "admin" || session.role === "user";
   const caller = session.role === "caller";
   // Callers only use their interview pages, profiles and My Page.
-  if (caller && !["/caller", "/me", "/profiles", "/notifications", "/feedback", "/help"].some((p) => pathname.startsWith(p))) {
+  if (caller && !["/caller", "/me", "/profiles", "/notifications", "/feedback", "/help", "/interview-history"].some((p) => pathname.startsWith(p))) {
     return NextResponse.redirect(new URL("/caller/requests", req.url));
   }
   // Bidders work from Generate Resume and View Generated Resumes; other workspace pages are hidden from them.
   if (session.role === "bidder" && (pathname === "/dashboard" || ["/overview", "/feedback"].some((p) => pathname === p || pathname.startsWith(p + "/")))) {
+    return NextResponse.redirect(new URL("/dashboard/import", req.url));
+  }
+  // Interview History: admins, users and callers only.
+  if (session.role === "bidder" && pathname.startsWith("/interview-history")) {
     return NextResponse.redirect(new URL("/dashboard/import", req.url));
   }
   if (!caller && pathname.startsWith("/caller")) {
@@ -32,5 +36,5 @@ export async function proxy(req: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/dashboard/:path*", "/applications/:path*", "/profiles/:path*", "/me/:path*", "/admin/:path*", "/interviews/:path*", "/caller/:path*", "/notifications/:path*", "/feedback/:path*", "/overview/:path*", "/help"],
+  matcher: ["/dashboard/:path*", "/applications/:path*", "/profiles/:path*", "/me/:path*", "/admin/:path*", "/interviews/:path*", "/caller/:path*", "/notifications/:path*", "/feedback/:path*", "/overview/:path*", "/help", "/interview-history/:path*"],
 };

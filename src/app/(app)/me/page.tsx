@@ -8,6 +8,7 @@ import { Alert, api, Badge, fmtDate, Modal, money, PageHeader, Spinner, PageSkel
 import { Avatar, AVATAR_PRESETS } from "@/components/Avatar";
 import { DEFAULT_TZ, timeZoneChoices, zoneName } from "@/lib/viewerTz";
 import SearchSelect from "@/components/SearchSelect";
+import { useToast } from "@/components/Alerts";
 
 type Me = {
   user: {
@@ -31,8 +32,9 @@ export default function MyPage() {
   const { data, error, reload } = useAsync(() => api<Me>("/api/me"), []);
   const [name, setName] = useState("");
   const [pw, setPw] = useState({ currentPassword: "", newPassword: "", confirm: "" });
-  const [msg, setMsg] = useState<{ kind: "error" | "success"; text: string } | null>(null);
+  const [formError, setFormError] = useState("");
   const [busy, setBusy] = useState(false);
+  const toast = useToast();
 
   useEffect(() => {
     if (data) setName(data.user.name);
@@ -40,14 +42,14 @@ export default function MyPage() {
 
   async function save(body: Record<string, unknown>, ok: string) {
     setBusy(true);
-    setMsg(null);
+    setFormError("");
     try {
       await api("/api/me", { method: "PATCH", json: body });
-      setMsg({ kind: "success", text: ok });
+      toast.success(ok);
       setPw({ currentPassword: "", newPassword: "", confirm: "" });
       reload();
     } catch (e) {
-      setMsg({ kind: "error", text: (e as Error).message });
+      setFormError((e as Error).message);
     } finally {
       setBusy(false);
     }
@@ -124,9 +126,9 @@ export default function MyPage() {
         </div>
       )}
 
-      {msg && (
+      {formError && (
         <div className="mb-4">
-          <Alert kind={msg.kind}>{msg.text}</Alert>
+          <Alert>{formError}</Alert>
         </div>
       )}
 
@@ -175,7 +177,7 @@ export default function MyPage() {
           className="card p-0"
           onSubmit={(e) => {
             e.preventDefault();
-            if (pw.newPassword !== pw.confirm) return setMsg({ kind: "error", text: "New passwords do not match" });
+            if (pw.newPassword !== pw.confirm) return setFormError("New passwords do not match");
             save({ currentPassword: pw.currentPassword, newPassword: pw.newPassword }, "Password changed");
           }}
         >
@@ -301,20 +303,21 @@ function TimezoneCard({ role, value, onSaved }: { role: string; value: string; o
   const router = useRouter();
   const [tz, setTz] = useState(value || DEFAULT_TZ);
   const [busy, setBusy] = useState(false);
-  const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const [error, setError] = useState("");
+  const toast = useToast();
   const zones = useMemo(() => timeZoneChoices(), []);
   useEffect(() => setTz(value || DEFAULT_TZ), [value]);
   const saved = value || DEFAULT_TZ;
   async function save() {
     setBusy(true);
-    setMsg(null);
+    setError("");
     try {
       await api("/api/me", { method: "PATCH", json: { timezone: tz === DEFAULT_TZ ? "" : tz } });
-      setMsg({ ok: true, text: "Time zone saved." });
+      toast.success("Time zone saved");
       onSaved();
       router.refresh();
     } catch (e) {
-      setMsg({ ok: false, text: (e as Error).message });
+      setError((e as Error).message);
     } finally {
       setBusy(false);
     }
@@ -339,7 +342,7 @@ function TimezoneCard({ role, value, onSaved }: { role: string; value: string; o
         </div>
       </div>
       <div className="card-footer justify-between">
-        <div className="min-w-0 text-[13px]">{msg && <span className={msg.ok ? "text-emerald-700" : "text-rose-600"}>{msg.text}</span>}</div>
+        <div className="min-w-0 text-[13px]">{error && <span className="text-rose-600">{error}</span>}</div>
         <button className="btn btn-primary" disabled={busy || tz === saved} onClick={save}>
           {busy && <Spinner />} Save time zone
         </button>
@@ -357,6 +360,7 @@ function AvatarPicker({ name, value, onSaved }: { name: string; value: string; o
   const [pick, setPick] = useState(value);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const toast = useToast();
 
   async function upload(file?: File) {
     if (!file) return;
@@ -389,6 +393,7 @@ function AvatarPicker({ name, value, onSaved }: { name: string; value: string; o
     try {
       await api("/api/me", { method: "PATCH", json: { avatar: pick } });
       setOpen(false);
+      toast.success("Avatar updated");
       onSaved();
       router.refresh(); // update the sidebar avatar
     } catch (e) {

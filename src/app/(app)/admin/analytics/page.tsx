@@ -264,20 +264,20 @@ function Breakdown({ rows, nameLabel, showCost }: { rows: BreakdownRow[]; nameLa
         <thead>
           <tr>
             <th>{nameLabel}</th>
-            <th className="text-right">Generated</th>
-            <th className="text-right">Submitted</th>
-            <th className="text-right">Interviews</th>
+            <th className="num">Generated</th>
+            <th className="num">Submitted</th>
+            <th className="num">Interviews</th>
             <th>Interview rate</th>
-            {showCost && <th className="text-right">AI cost</th>}
+            {showCost && <th className="num">AI cost</th>}
           </tr>
         </thead>
         <tbody>
           {rows.map((r) => (
             <tr key={r.id}>
               <td className="min-w-[10rem] font-medium text-slate-900">{r.name}</td>
-              <td className="text-right tabular-nums">{n(r.generated)}</td>
-              <td className="text-right tabular-nums">{n(r.submitted)}</td>
-              <td className="text-right whitespace-nowrap tabular-nums">
+              <td className="num">{n(r.generated)}</td>
+              <td className="num">{n(r.submitted)}</td>
+              <td className="num">
                 {n(r.interviews)}
                 {r.followUps > 0 && <span className="ml-1 text-xs text-slate-500">({r.followUps} follow-up{r.followUps === 1 ? "" : "s"})</span>}
               </td>
@@ -289,7 +289,7 @@ function Breakdown({ rows, nameLabel, showCost }: { rows: BreakdownRow[]; nameLa
                   <span className="w-12 shrink-0 text-right text-xs font-medium text-slate-700 tabular-nums">{r.submitted ? pct(r.interviewRate) : "—"}</span>
                 </div>
               </td>
-              {showCost && <td className="text-right text-slate-600 tabular-nums">{usd(r.cost)}</td>}
+              {showCost && <td className="num text-slate-600">{usd(r.cost)}</td>}
             </tr>
           ))}
         </tbody>

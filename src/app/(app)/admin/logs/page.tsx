@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Download, RefreshCw, ScrollText, Search, TriangleAlert } from "lucide-react";
 import { ROLE_LABEL, type Role } from "@/components/Accounts";
 import DateInput from "@/components/DateInput";
+import { useToast } from "@/components/Alerts";
 import { Alert, api, Badge, downloadFile, EmptyState, fmtStamp, limitParam, Modal, PageHeader, Pagination, rangeParams, Spinner, TableSkeleton, useAsync, usePageSize } from "@/components/ui";
 
 type Log = {
@@ -54,7 +55,7 @@ export default function LogsPage() {
   const [pageSize, setPageSize] = usePageSize("admin-logs", 50);
   const [open, setOpen] = useState<Log | null>(null);
   const [exporting, setExporting] = useState(false);
-  const [error, setError] = useState("");
+  const toast = useToast();
 
   const users = useAsync(() => api<{ users: { _id: string; name: string; email: string }[] }>("/api/admin/users").then((r) => r.users), []);
   const params = () => {
@@ -78,11 +79,10 @@ export default function LogsPage() {
 
   async function exportCsv() {
     setExporting(true);
-    setError("");
     try {
       await downloadFile(`/api/admin/logs/export?${params()}`, "logs.csv");
     } catch (e) {
-      setError((e as Error).message);
+      toast.error("Export failed", (e as Error).message);
     } finally {
       setExporting(false);
     }
@@ -132,11 +132,6 @@ export default function LogsPage() {
         )}
       </div>
 
-      {error && (
-        <div className="mb-4">
-          <Alert>{error}</Alert>
-        </div>
-      )}
       <div className="card overflow-hidden p-0">
         <div className="grid grid-cols-1 gap-3 border-b border-slate-200 px-4 py-3.5 min-[400px]:grid-cols-2 sm:flex sm:flex-wrap sm:items-end sm:px-5">
           <div className="min-w-0 min-[400px]:col-span-2 sm:min-w-56 sm:flex-1">
@@ -231,7 +226,7 @@ export default function LogsPage() {
                   <th>Category</th>
                   <th>Who</th>
                   <th>What</th>
-                  <th className="text-right">Status</th>
+                  <th className="num">Status</th>
                   <th>IP</th>
                 </tr>
               </thead>
@@ -257,7 +252,7 @@ export default function LogsPage() {
                       <div className="truncate text-slate-900">{l.summary}</div>
                       <div className="truncate font-mono text-[11px] text-slate-400">{l.action}</div>
                     </td>
-                    <td className="py-2! text-right font-mono text-xs whitespace-nowrap tabular-nums">
+                    <td className="num py-2! font-mono text-xs">
                       <span className={l.status >= 500 ? "font-medium text-rose-600" : l.status >= 400 ? "font-medium text-amber-600" : "text-slate-500"}>{l.status || "—"}</span>
                       {l.durationMs ? <div className="text-[11px] text-slate-400">{l.durationMs} ms</div> : null}
                     </td>

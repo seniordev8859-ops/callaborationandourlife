@@ -3,6 +3,7 @@
 import { Suspense, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { ScreenshotDrop } from "@/components/interviews";
+import { useToast } from "@/components/Alerts";
 import { CATEGORY_LABEL, FeedbackStatus, Thread, type FeedbackItem } from "@/components/FeedbackUi";
 import { ChevronDown, Image as ImageIcon, MessageSquare, Plus } from "lucide-react";
 import { Alert, api, EmptyState, fmtDate, Modal, PageHeader, Spinner, SkeletonText, useAsync } from "@/components/ui";
@@ -28,7 +29,7 @@ function FeedbackPage() {
   const [shots, setShots] = useState<{ url: string; publicId: string }[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-  const [notice, setNotice] = useState("");
+  const toast = useToast();
   const [openId, setOpenId] = useState("");
 
   async function send(e: React.FormEvent) {
@@ -41,7 +42,7 @@ function FeedbackPage() {
       setMessage("");
       setShots([]);
       setCreating(false);
-      setNotice("Thanks! Your feedback was sent to the administrators. Replies appear here and in your notifications.");
+      toast.success("Thanks! Your feedback was sent", "Replies from the administrators appear here and in your notifications.");
       list.reload();
     } catch (err) {
       setError((err as Error).message);
@@ -62,9 +63,9 @@ function FeedbackPage() {
           </button>
         }
       />
-      {notice && (
+      {list.error && (
         <div className="mb-4">
-          <Alert kind="success">{notice}</Alert>
+          <Alert>{list.error}</Alert>
         </div>
       )}
       <div>

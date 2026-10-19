@@ -3,11 +3,17 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
-    "dev": "next dev --webpack",
+    "predev": "node -e \"require('fs').existsSync('assistant/node_modules')||require('child_process').execSync('npm --prefix assistant install',{stdio:'inherit'})\"",
+    "dev": "concurrently --kill-others-on-fail -n tailorbid,assistant -c cyan,magenta \"next dev --webpack\" \"npm --prefix assistant run companion\"",
+    "dev:web": "next dev --webpack",
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "seed": "node --env-file=.env.local scripts/seed.mjs"
+    "seed": "node --env-file=.env.local scripts/seed.mjs",
+    "assistant": "npm --prefix assistant start",
+    "assistant:dev": "npm --prefix assistant run dev",
+    "assistant:install": "npm --prefix assistant install",
+    "assistant:test": "npm --prefix assistant test"
   },
   "dependencies": {
     "bcryptjs": "^3.0.3",
@@ -31,6 +37,7 @@
     "@types/node": "^26.6.2",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
+    "concurrently": "^9.2.5",
     "tailwindcss": "^4.3.3",
     "typescript": "^7.0.2"
   },

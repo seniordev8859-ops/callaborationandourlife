@@ -3,6 +3,8 @@
 import { Suspense, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { Avatar } from "@/components/Avatar";
+import { PresenceAvatar } from "@/components/Presence";
+import { useToast } from "@/components/Alerts";
 import { ROLE_LABEL, type Role } from "@/components/Accounts";
 import { CATEGORY_LABEL, FeedbackStatus, STATUS_LABEL, Thread, type FeedbackItem } from "@/components/FeedbackUi";
 import { Check, Inbox, Paperclip, Send } from "lucide-react";
@@ -24,6 +26,7 @@ function AdminFeedback() {
   const [open, setOpen] = useState<FeedbackItem | null>(null);
   const rows = (list.data?.items ?? []).filter((f) => !category || f.category === category);
   const { pageRows, pager } = useClientPaging(rows, "admin-feedback");
+  const toast = useToast();
 
   useEffect(() => {
     const id = sp.get("id");
@@ -71,6 +74,11 @@ function AdminFeedback() {
           </div>
         )}
       </div>
+      {list.error && (
+        <div className="mb-4">
+          <Alert>{list.error}</Alert>
+        </div>
+      )}
       <div className="card overflow-hidden p-0">
         {list.loading && !list.data ? (
           <TableSkeleton rows={6} cols={5} />
@@ -84,21 +92,21 @@ function AdminFeedback() {
                 <th>From</th>
                 <th>Subject</th>
                 <th>Type</th>
-                <th>Received</th>
+                <th className="num">Received</th>
                 <th>Status</th>
               </tr>
             </thead>
             <tbody>
               {pageRows.map((f) => (
                 <tr key={f._id} className={`cursor-pointer ${f.seenAt ? "" : "bg-indigo-50/40"}`} onClick={() => openItem(f)}>
-                  <td>
-                    <span className="flex items-center gap-2.5">
+                  <td className="min-w-48">
+                    <span className="flex items-center gap-3">
                       <span className="relative shrink-0">
-                        <Avatar avatar={f.user?.avatar} name={f.userName} size={28} />
+                        {f.user ? <PresenceAvatar userId={f.user._id} avatar={f.user.avatar} name={f.userName} size={34} /> : <Avatar name={f.userName} size={34} />}
                         {!f.seenAt && <span aria-label="Not opened" className="absolute -top-0.5 -left-0.5 size-2 rounded-full bg-indigo-600 ring-2 ring-white" />}
                       </span>
                       <span className="min-w-0">
-                        <span className={`block whitespace-nowrap text-slate-900 ${f.seenAt ? "" : "font-semibold"}`}>{f.userName}</span>
+                        <span className={`block truncate text-slate-900 ${f.seenAt ? "font-medium" : "font-semibold"}`}>{f.userName}</span>
                         <span className="block text-xs text-slate-500">{ROLE_LABEL[f.role as Role] ?? f.role}</span>
                       </span>
                     </span>
@@ -118,7 +126,7 @@ function AdminFeedback() {
                   <td className="whitespace-nowrap">
                     <span className="chip">{CATEGORY_LABEL[f.category]}</span>
                   </td>
-                  <td className="text-xs whitespace-nowrap text-slate-500 tabular-nums">{fmtDateTime(f.createdAt)}</td>
+                  <td className="num text-xs text-slate-500">{fmtDateTime(f.createdAt)}</td>
                   <td>
                     <FeedbackStatus s={f.status} />
                   </td>
@@ -134,7 +142,8 @@ function AdminFeedback() {
         <FeedbackModal
           f={open}
           onClose={() => setOpen(null)}
-          onChanged={() => {
+          onChanged={(text) => {
+            toast.success(text);
             setOpen(null);
             list.reload();
           }}
@@ -144,7 +153,7 @@ function AdminFeedback() {
   );
 }
 
-function FeedbackModal({ f, onClose, onChanged }: { f: FeedbackItem; onClose: () => void; onChanged: () => void }) {
+function FeedbackModal({ f, onClose, onChanged }: { f: FeedbackItem; onClose: () => void; onChanged: (text: string) => void }) {
   const [reply, setReply] = useState("");
   const [status, setStatus] = useState(f.status);
   const [busy, setBusy] = useState(false);
@@ -154,7 +163,7 @@ function FeedbackModal({ f, onClose, onChanged }: { f: FeedbackItem; onClose: ()
     setError("");
     try {
       await api(`/api/feedback/${f._id}`, { method: "PATCH", json: { status, reply } });
-      onChanged();
+      onChanged(reply.trim() ? `Reply sent to ${f.userName}` : "Status saved");
     } catch (e) {
       setError((e as Error).message);
     } finally {

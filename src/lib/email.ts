@@ -1,6 +1,7 @@
 import { User } from "./models/User";
 import { signupEmail, statusEmail, type Email } from "./emailTemplates";
 import { logActivity } from "./activity";
+import { notify } from "./inbox";
 
 export function appUrl() {
   const url =
@@ -38,14 +39,17 @@ async function deliver(to: string | string[], email: Email): Promise<boolean> {
 
 export async function notifyAdminsOfSignup(name: string, email: string) {
   const admins = await User.find({ role: "admin", status: "approved" }).select("email").lean();
+  await notify(admins, { kind: "account-signup", tone: "warning", title: "New sign-up to approve", body: `${name} (${email}) is waiting for approval.`, url: "/admin/users?status=pending" });
   await sendEmail(
     admins.map((a) => a.email),
     signupEmail({ name, email, url: appUrl() })
   );
 }
 
-export async function notifyUserStatus(name: string, email: string, status: string) {
+export async function notifyUserStatus(name: string, email: string, status: string, userId?: unknown) {
   if (!["approved", "rejected", "suspended"].includes(status)) return;
+  // Only an active account can sign in and see it.
+  if (status === "approved" && userId) await notify([String(userId)], { kind: "account-status", tone: "success", title: "Your account is active", body: "An administrator approved your account. Welcome to TailorBid." });
   await sendEmail(email, statusEmail({ name, status, url: appUrl() }));
 }
 

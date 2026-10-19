@@ -3,6 +3,8 @@
 import { useState } from "react";
 import { FlaskConical, KeyRound, Pencil, Plus, Star, Trash2, TriangleAlert } from "lucide-react";
 import ModelInput from "@/components/ModelInput";
+import { useConfirm, useToast } from "@/components/Alerts";
+import { ActionMenu, type ActionItem } from "@/components/ActionMenu";
 import { Alert, api, Badge, EmptyState, fmtDateTime, Modal, PageHeader, Spinner, TableSkeleton, useAsync, useClientPaging } from "@/components/ui";
 
 type KeyRow = {
@@ -50,37 +52,59 @@ export default function KeysPage() {
   const list = useAsync(() => api<{ keys: KeyRow[]; envFallback: boolean }>("/api/admin/keys"), []);
   const [editing, setEditing] = useState<KeyRow | "new" | null>(null);
   const { pageRows: keyRows, pager } = useClientPaging(list.data?.keys ?? [], "api-keys");
-  const [msg, setMsg] = useState<{ kind: "error" | "success"; text: string } | null>(null);
   const [testing, setTesting] = useState("");
+  const toast = useToast();
+  const confirm = useConfirm();
 
   async function test(k: KeyRow) {
     setTesting(k._id);
-    setMsg(null);
     try {
       const r = await api<{ ok: boolean; message: string }>(`/api/admin/keys/${k._id}`, { method: "POST" });
-      setMsg({ kind: r.ok ? "success" : "error", text: `${k.label}: ${r.message}` });
+      if (r.ok) toast.success(`${k.label} works`, r.message);
+      else toast.error(`${k.label} failed the test`, r.message);
       list.reload();
     } catch (e) {
-      setMsg({ kind: "error", text: (e as Error).message });
+      toast.error("Couldn't test the key", (e as Error).message);
     } finally {
       setTesting("");
     }
   }
 
   async function remove(k: KeyRow) {
-    if (!confirm(`Delete the key "${k.label}"?`)) return;
+    if (
+      !(await confirm({
+        title: "Delete this key?",
+        message: `"${k.label}" is removed permanently. This can't be undone.`,
+        confirmLabel: "Delete key",
+        danger: true,
+      }))
+    )
+      return;
     try {
       await api(`/api/admin/keys/${k._id}`, { method: "DELETE" });
+      toast.success(`${k.label} deleted`);
       list.reload();
     } catch (e) {
-      setMsg({ kind: "error", text: (e as Error).message });
+      toast.error("Couldn't delete the key", (e as Error).message);
     }
   }
 
   async function makeDefault(k: KeyRow) {
-    await api(`/api/admin/keys/${k._id}`, { method: "PATCH", json: { isDefault: true } });
-    list.reload();
+    try {
+      await api(`/api/admin/keys/${k._id}`, { method: "PATCH", json: { isDefault: true } });
+      toast.success(`${k.label} is now the default key`);
+      list.reload();
+    } catch (e) {
+      toast.error("Couldn't change the default key", (e as Error).message);
+    }
   }
+
+  const menuItems = (k: KeyRow): ActionItem[] => [
+    { label: "Edit", icon: Pencil, onSelect: () => setEditing(k) },
+    { label: "Make default", icon: Star, disabled: k.isDefault || !k.active, onSelect: () => makeDefault(k) },
+    "divider",
+    { label: "Delete", icon: Trash2, danger: true, onSelect: () => remove(k) },
+  ];
 
   return (
     <div className="mx-auto max-w-7xl">
@@ -94,9 +118,9 @@ export default function KeysPage() {
           </button>
         }
       />
-      {msg && (
+      {list.error && (
         <div className="mb-4">
-          <Alert kind={msg.kind}>{msg.text}</Alert>
+          <Alert>{list.error}</Alert>
         </div>
       )}
       {list.data && !list.data.keys.length && (
@@ -129,19 +153,21 @@ export default function KeysPage() {
               <tr>
                 <th>Key</th>
                 <th>Model</th>
-                <th className="text-right">Generations (month)</th>
-                <th className="text-right">Tokens (month)</th>
-                <th className="text-right">Est. cost (month)</th>
+                <th className="num" title="Generations this month">Generations</th>
+                <th className="num" title="Tokens this month">Tokens</th>
+                <th className="num" title="Estimated cost this month">Est. cost</th>
                 <th>Profiles</th>
                 <th>Status</th>
-                <th />
+                <th className="actions">
+                  <span className="sr-only">Actions</span>
+                </th>
               </tr>
             </thead>
             <tbody>
               {keyRows.map((k) => {
                 const pct = k.monthlyTokenLimit ? Math.min(100, (k.usage.tokens / k.monthlyTokenLimit) * 100) : 0;
                 return (
-                  <tr key={k._id}>
+                  <tr key={k._id} className={`cursor-pointer ${k.active ? "" : "opacity-60"}`} onClick={() => setEditing(k)}>
                     <td className="min-w-[13rem]">
                       <div className="flex items-center gap-2">
                         <span className="font-medium text-slate-900">{k.label}</span> {k.isDefault && <Badge value="approved" label="default" />}
@@ -155,9 +181,9 @@ export default function KeysPage() {
                     <td className="whitespace-nowrap">
                       <span className="font-mono text-xs text-slate-700">{k.model}</span>
                     </td>
-                    <td className="text-right tabular-nums">{k.usage.generations}</td>
-                    <td className="text-right tabular-nums">
-                      <div className="whitespace-nowrap">
+                    <td className="num">{k.usage.generations}</td>
+                    <td className="num">
+                      <div>
                         {k.usage.tokens.toLocaleString()}
                         {k.monthlyTokenLimit > 0 && <span className="text-xs text-slate-400"> / {k.monthlyTokenLimit.toLocaleString()}</span>}
                       </div>
@@ -167,7 +193,7 @@ export default function KeysPage() {
                         </div>
                       )}
                     </td>
-                    <td className="text-right font-medium tabular-nums">${k.usage.cost.toFixed(2)}</td>
+                    <td className="num font-medium">${k.usage.cost.toFixed(2)}</td>
                     <td className="max-w-48 text-xs text-slate-700">{k.profiles.map((p) => p.label).join(", ") || <span className="text-slate-400">{k.isDefault ? "All without a key" : "None"}</span>}</td>
                     <td className="text-xs">
                       <Badge value={k.active ? "active" : "inactive"} />
@@ -180,26 +206,16 @@ export default function KeysPage() {
                         <div className="mt-1.5 whitespace-nowrap text-slate-400 tabular-nums">Last used {fmtDateTime(k.lastUsedAt)}</div>
                       )}
                     </td>
-                    <td className="text-right whitespace-nowrap">
-                      <div className="flex flex-wrap items-center justify-end gap-1">
+                    <td className="actions">
+                      <div className="flex items-center justify-end gap-1" onClick={(e) => e.stopPropagation()}>
                         <button className="btn btn-secondary btn-sm" onClick={() => test(k)} disabled={testing === k._id}>
                           {testing === k._id ? <Spinner className="h-3 w-3" /> : <FlaskConical />}
-                          {testing === k._id ? null : "Test"}
+                          Test
                         </button>
-                        <button className="btn btn-ghost btn-sm" onClick={() => setEditing(k)}>
+                        <button className="btn btn-ghost btn-sm btn-icon" onClick={() => setEditing(k)} aria-label={`Edit ${k.label}`} title="Edit">
                           <Pencil />
-                          Edit
                         </button>
-                        {!k.isDefault && k.active && (
-                          <button className="btn btn-ghost btn-sm" onClick={() => makeDefault(k)}>
-                            <Star />
-                            Make default
-                          </button>
-                        )}
-                        <button className="btn btn-ghost btn-sm text-rose-600 hover:bg-rose-50 hover:text-rose-700" onClick={() => remove(k)}>
-                          <Trash2 />
-                          Delete
-                        </button>
+                        <ActionMenu items={menuItems(k)} label={`More actions for ${k.label}`} />
                       </div>
                     </td>
                   </tr>
@@ -217,6 +233,7 @@ export default function KeysPage() {
           row={editing === "new" ? null : editing}
           onClose={() => setEditing(null)}
           onSaved={() => {
+            toast.success(editing === "new" ? "Key added" : "Key saved");
             setEditing(null);
             list.reload();
           }}

@@ -5,6 +5,7 @@ import { User } from "./models/User";
 import { getSettings } from "./models/Settings";
 import { claim, NotificationLog } from "./models/NotificationLog";
 import { appUrl, sendEmail } from "./email";
+import { notify } from "./inbox";
 import { dailyReportEmail, profileMilestoneEmail, userMilestoneEmail, type BidRow, type ProfileReport } from "./emailTemplates";
 import { dayKey, dayRange, formatDayLong, formatTime, todayRange } from "./tz";
 
@@ -69,6 +70,13 @@ export async function processSubmissionMilestones(applicationId: Types.ObjectId 
     for (const m of reached) {
       if (!reps.length) break;
       if (!(await claim(`ms-sub:profile:${app.profile}:${periodKey}:${m}`, "milestone-profile", { profileCount, applicationId: String(app._id) }))) continue;
+      await notify(reps, {
+        kind: "milestone",
+        tone: "success",
+        title: `${profile.label}: ${m} submitted ${period === "daily" ? "today" : "in total"}`,
+        body: `${profileCount} applications submitted for ${profile.label}${period === "daily" ? " today" : ""}. Latest: ${latest.company || "a company"}${latest.role ? ` · ${latest.role}` : ""} by ${latest.bidder}.`,
+        url: "/admin/applications",
+      });
       await Promise.all(
         reps.map((r) =>
           sendEmail(
@@ -85,6 +93,13 @@ export async function processSubmissionMilestones(applicationId: Types.ObjectId 
     const userCount = await Application.countDocuments({ user: app.user, ...submitted } as Record<string, unknown>);
     for (const m of milestones.filter((x) => userCount >= x)) {
       if (!(await claim(`ms-sub:user:${app.user}:${periodKey}:${m}`, "milestone-user", { userCount, applicationId: String(app._id) }))) continue;
+      await notify([bidder._id], {
+        kind: "milestone",
+        tone: "success",
+        title: `Milestone: ${m} submitted ${period === "daily" ? "today" : "in total"}`,
+        body: `You have submitted ${userCount} applications${period === "daily" ? " today" : ""}. Keep it up!`,
+        url: "/applications",
+      });
       await sendEmail(bidder.email, userMilestoneEmail({ recipientName: bidder.name, milestone: m, count: userCount, period, latest, url }));
     }
   }

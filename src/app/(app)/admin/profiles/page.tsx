@@ -1,9 +1,13 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { useRole } from "@/components/AppShell";
-import { Eye, Pencil, Plus, Power, Search, Trash2, UserPlus, Users } from "lucide-react";
+import { ActionMenu, type ActionItem } from "@/components/ActionMenu";
+import { useConfirm, useToast } from "@/components/Alerts";
+import { Avatar } from "@/components/Avatar";
+import { Eye, Pencil, Plus, Power, PowerOff, Search, Trash2, UserPlus, Users } from "lucide-react";
 import { Alert, api, ApiError, Badge, EmptyState, PageHeader, Segmented, Spinner, TableSkeleton, useAsync, useClientPaging } from "@/components/ui";
 
 type Row = {
@@ -24,11 +28,13 @@ type Row = {
 
 export default function ProfilesPage() {
   const isAdmin = useRole() === "admin";
+  const router = useRouter();
+  const toast = useToast();
+  const confirm = useConfirm();
   const { data, error, loading, reload } = useAsync(() => api<{ profiles: Row[] }>("/api/admin/profiles").then((r) => r.profiles), []);
   const [status, setStatus] = useState<"all" | "active" | "inactive">("all");
   const [q, setQ] = useState("");
   const [busy, setBusy] = useState("");
-  const [msg, setMsg] = useState<{ kind: "error" | "success"; text: string } | null>(null);
 
   const rows = (data ?? []).filter((p) => {
     if (status === "active" && !p.active) return false;
@@ -38,40 +44,69 @@ export default function ProfilesPage() {
   });
 
   async function toggleActive(p: Row) {
+    if (
+      p.active &&
+      !(await confirm({
+        title: `Deactivate ${p.label}?`,
+        message: "Users can no longer generate applications with it until it is activated again.",
+        confirmLabel: "Deactivate",
+      }))
+    )
+      return;
     setBusy(p._id);
-    setMsg(null);
     try {
       await api(`/api/admin/profiles/${p._id}`, { method: "PATCH", json: { active: !p.active } });
-      setMsg({ kind: "success", text: `${p.label} ${p.active ? "deactivated. Users can no longer generate with it" : "activated"}.` });
+      if (p.active) toast.success(`${p.label} deactivated`, "Users can no longer generate with it.");
+      else toast.success(`${p.label} activated`);
       reload();
     } catch (e) {
-      setMsg({ kind: "error", text: (e as Error).message });
+      toast.error((e as Error).message);
     } finally {
       setBusy("");
     }
   }
 
   async function remove(p: Row) {
-    if (!confirm(`Delete the profile "${p.label}"? This cannot be undone.`)) return;
+    if (
+      !(await confirm({
+        title: "Delete this profile?",
+        message: `"${p.label}" will be deleted permanently. This cannot be undone.`,
+        confirmLabel: "Delete profile",
+        danger: true,
+      }))
+    )
+      return;
     setBusy(p._id);
-    setMsg(null);
     try {
       await api(`/api/admin/profiles/${p._id}`, { method: "DELETE" });
-      setMsg({ kind: "success", text: `${p.label} deleted.` });
+      toast.success(`${p.label} deleted`);
       reload();
     } catch (e) {
       const err = e as ApiError;
       if (err.status === 409 && err.data.history) {
-        const ok = confirm(
-          `${err.message}\n\nDelete anyway? The ${err.data.history} application(s) stay in the history under "${p.label} (deleted)". ` +
-            `Tip: deactivating keeps the profile but stops new bids.`
-        );
+        const ok = await confirm({
+          title: "Delete anyway?",
+          message: (
+            <>
+              <p>{err.message}</p>
+              <p className="mt-2">
+                The {String(err.data.history)} application(s) stay in the history under &ldquo;{p.label} (deleted)&rdquo;. Tip: deactivating keeps the profile but stops new bids.
+              </p>
+            </>
+          ),
+          confirmLabel: "Delete anyway",
+          danger: true,
+        });
         if (ok) {
-          await api(`/api/admin/profiles/${p._id}?force=1`, { method: "DELETE" });
-          setMsg({ kind: "success", text: `${p.label} deleted. Its history was kept.` });
-          reload();
+          try {
+            await api(`/api/admin/profiles/${p._id}?force=1`, { method: "DELETE" });
+            toast.success(`${p.label} deleted`, "Its history was kept.");
+            reload();
+          } catch (e2) {
+            toast.error((e2 as Error).message);
+          }
         }
-      } else setMsg({ kind: "error", text: err.message });
+      } else toast.error(err.message);
     } finally {
       setBusy("");
     }
@@ -80,37 +115,33 @@ export default function ProfilesPage() {
   const { pageRows, pager } = useClientPaging(rows, "profiles");
   const counts = { all: data?.length ?? 0, active: data?.filter((p) => p.active).length ?? 0, inactive: data?.filter((p) => !p.active).length ?? 0 };
 
-  const rowActions = (p: Row, align = "") => (
-    <div className={`flex flex-wrap items-center gap-1 ${align}`}>
-      <Link href={`/admin/profiles/${p._id}/view`} className="btn btn-ghost btn-sm">
-        <Eye />
-        View
-      </Link>
-      <Link href={`/admin/profiles/${p._id}`} className="btn btn-ghost btn-sm">
+  const menuItems = (p: Row): ActionItem[] => [
+    { label: "View", icon: Eye, onSelect: () => router.push(`/admin/profiles/${p._id}/view`) },
+    { label: "Edit", icon: Pencil, onSelect: () => router.push(`/admin/profiles/${p._id}`) },
+    { label: "Assign", icon: UserPlus, onSelect: () => router.push(`/admin/assignments?profile=${p._id}`) },
+    ...(isAdmin
+      ? [
+          p.active
+            ? { label: "Deactivate", icon: PowerOff, disabled: busy === p._id, onSelect: () => toggleActive(p) }
+            : { label: "Activate", icon: Power, disabled: busy === p._id, onSelect: () => toggleActive(p) },
+          "divider" as const,
+          { label: "Delete", icon: Trash2, danger: true, disabled: busy === p._id, onSelect: () => remove(p) },
+        ]
+      : []),
+  ];
+  const rowActions = (p: Row) => (
+    <div className="flex items-center justify-end gap-1" onClick={(e) => e.stopPropagation()}>
+      {busy === p._id && <Spinner className="h-3.5 w-3.5 text-slate-400" />}
+      <Link href={`/admin/profiles/${p._id}`} className="btn btn-ghost btn-sm btn-icon" aria-label={`Edit ${p.label}`} title="Edit">
         <Pencil />
-        Edit
       </Link>
-      <Link href={`/admin/assignments?profile=${p._id}`} className="btn btn-ghost btn-sm">
-        <UserPlus />
-        Assign
-      </Link>
-      {isAdmin && (
-        <>
-          <button className="btn btn-ghost btn-sm" disabled={busy === p._id} onClick={() => toggleActive(p)}>
-            {busy === p._id ? <Spinner className="h-3 w-3" /> : <Power />}
-            {busy === p._id ? null : p.active ? "Deactivate" : "Activate"}
-          </button>
-          <button
-            className="btn btn-ghost btn-sm text-rose-600 hover:bg-rose-50 hover:text-rose-700"
-            disabled={busy === p._id}
-            onClick={() => remove(p)}
-          >
-            <Trash2 />
-            Delete
-          </button>
-        </>
-      )}
+      <ActionMenu items={menuItems(p)} label={`More actions for ${p.label}`} />
     </div>
+  );
+  const quota = (p: Row) => (
+    <span className={p.monthlyQuota && p.usage.month >= p.monthlyQuota ? "text-rose-600" : "text-slate-900"}>
+      {p.usage.month} <span className="text-slate-400">/ {p.monthlyQuota || "∞"}</span>
+    </span>
   );
 
   return (
@@ -141,9 +172,9 @@ export default function ProfilesPage() {
         </div>
       </div>
 
-      {(error || msg) && (
+      {error && (
         <div className="mb-4">
-          <Alert kind={msg?.kind ?? "error"}>{msg?.text ?? error}</Alert>
+          <Alert>{error}</Alert>
         </div>
       )}
 
@@ -160,17 +191,21 @@ export default function ProfilesPage() {
           <ul className="divide-y divide-slate-200 md:hidden">
             {pageRows.map((p) => (
               <li key={p._id} className={`space-y-3 px-4 py-4 ${p.active ? "" : "bg-slate-50/60"}`}>
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <Link href={`/admin/profiles/${p._id}/view`} className="font-medium text-slate-900 hover:underline">
-                      {p.label}
-                    </Link>
+                <div className="flex items-start gap-3">
+                  <Avatar name={p.fullName || p.label} size={36} />
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <Link href={`/admin/profiles/${p._id}/view`} className="font-medium text-slate-900 hover:text-indigo-600">
+                        {p.label}
+                      </Link>
+                      {!p.active && <Badge value="inactive" />}
+                    </div>
                     <div className="mt-0.5 text-xs break-words text-slate-500">
                       {p.fullName}
                       {p.email && ` · ${p.email}`}
                     </div>
                   </div>
-                  <Badge value={p.active ? "active" : "inactive"} />
+                  {rowActions(p)}
                 </div>
                 <dl className="grid grid-cols-2 gap-x-4 gap-y-2.5 text-[13px]">
                   <div className="col-span-2 min-w-0">
@@ -204,9 +239,7 @@ export default function ProfilesPage() {
                   )}
                   <div>
                     <dt className="text-xs text-slate-500">Quota (month)</dt>
-                    <dd className={`tabular-nums ${p.monthlyQuota && p.usage.month >= p.monthlyQuota ? "text-rose-600" : "text-slate-900"}`}>
-                      {p.usage.month} <span className="text-slate-400">/</span> {p.monthlyQuota || "∞"}
-                    </dd>
+                    <dd className="tabular-nums">{quota(p)}</dd>
                   </div>
                   <div>
                     <dt className="text-xs text-slate-500">All time</dt>
@@ -220,80 +253,89 @@ export default function ProfilesPage() {
                     </dd>
                   </div>
                 </dl>
-                <div className="-mx-1">{rowActions(p)}</div>
               </li>
             ))}
           </ul>
           <div className="hidden overflow-x-auto md:block">
-          <table className="table">
-            <thead>
-              <tr>
-                <th>Profile</th>
-                <th>Status</th>
-                <th>Current role</th>
-                {isAdmin && <th>OpenAI key</th>}
-                <th className="text-right">Quota (month)</th>
-                <th className="text-right">All time</th>
-                <th>Assigned to</th>
-                <th className="text-right">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {pageRows.map((p) => (
-                <tr key={p._id} className={p.active ? "" : "bg-slate-50/60"}>
-                  <td>
-                    <Link href={`/admin/profiles/${p._id}/view`} className="font-medium text-slate-900 hover:underline">
-                      {p.label}
-                    </Link>
-                    <div className="mt-0.5 text-xs text-slate-500">
-                      {p.fullName}
-                      {p.email && ` · ${p.email}`}
-                    </div>
-                  </td>
-                  <td>
-                    <Badge value={p.active ? "active" : "inactive"} />
-                  </td>
-                  <td>
-                    {p.experience[0] ? (
-                      <>
-                        <div className="text-slate-900">{p.experience[0].title}</div>
-                        <div className="mt-0.5 text-xs text-slate-500">{p.experience[0].company}</div>
-                      </>
-                    ) : (
-                      <span className="text-slate-400">—</span>
-                    )}
-                  </td>
-                  {isAdmin && (
-                    <td className="text-xs">
-                      {p.apiKey ? (
+            <table className="table">
+              <thead>
+                <tr>
+                  <th>Profile</th>
+                  <th>Status</th>
+                  <th>Current role</th>
+                  {isAdmin && <th>OpenAI key</th>}
+                  <th className="num">This month</th>
+                  <th className="num">All time</th>
+                  <th>Assigned to</th>
+                  <th className="actions">
+                    <span className="sr-only">Actions</span>
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {pageRows.map((p) => (
+                  <tr key={p._id} className={`cursor-pointer ${p.active ? "" : "bg-slate-50/60"}`} onClick={() => router.push(`/admin/profiles/${p._id}/view`)}>
+                    <td className="min-w-56">
+                      <span className="flex items-center gap-3">
+                        <Avatar name={p.fullName || p.label} size={34} />
+                        <span className="min-w-0">
+                          <Link
+                            href={`/admin/profiles/${p._id}/view`}
+                            className="block truncate font-medium text-slate-900 hover:text-indigo-600"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            {p.label}
+                          </Link>
+                          <span className="block truncate text-xs text-slate-500">
+                            {p.fullName}
+                            {p.email && ` · ${p.email}`}
+                          </span>
+                        </span>
+                      </span>
+                    </td>
+                    <td>
+                      <Badge value={p.active ? "active" : "inactive"} />
+                    </td>
+                    <td className="max-w-56">
+                      {p.experience[0] ? (
                         <>
-                          <div className={p.apiKey.active ? "text-slate-900" : "text-rose-600"}>
-                            {p.apiKey.label}
-                            {!p.apiKey.active && " (disabled)"}
-                          </div>
-                          <div className="mt-0.5 font-mono text-slate-500">{p.apiKey.keyMask}</div>
+                          <div className="truncate text-slate-900">{p.experience[0].title}</div>
+                          <div className="truncate text-xs text-slate-500">{p.experience[0].company}</div>
                         </>
                       ) : (
-                        <span className="text-slate-500">Default key</span>
+                        <span className="text-slate-300">—</span>
                       )}
-                      <div className="mt-0.5 text-slate-500">{p.openaiModel || p.apiKey?.model || ""}</div>
                     </td>
-                  )}
-                  <td className={`text-right whitespace-nowrap tabular-nums ${p.monthlyQuota && p.usage.month >= p.monthlyQuota ? "text-rose-600" : ""}`}>
-                    {p.usage.month} <span className="text-slate-400">/</span> {p.monthlyQuota || "∞"}
-                  </td>
-                  <td className="text-right tabular-nums">{p.usage.total}</td>
-                  <td className="max-w-48 min-w-[10rem] text-xs">
-                    {p.assignedTo.map((a) => a.name).join(", ") || <span className="text-slate-400">Nobody</span>}
-                    {!!p.managers?.length && <div className="mt-1 text-slate-500">User: <span className="text-slate-700">{p.managers.map((r) => r.name).join(", ")}</span></div>}
-                  </td>
-                  <td className="min-w-[13rem] text-right">
-                    {rowActions(p, "justify-end")}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+                    {isAdmin && (
+                      <td className="text-xs">
+                        {p.apiKey ? (
+                          <div className={p.apiKey.active ? "text-slate-900" : "text-rose-600"}>
+                            {p.apiKey.label}
+                            {!p.apiKey.active && " (disabled)"} <span className="font-mono text-slate-400">{p.apiKey.keyMask}</span>
+                          </div>
+                        ) : (
+                          <div className="text-slate-500">Default key</div>
+                        )}
+                        {(p.openaiModel || p.apiKey?.model) && <div className="text-slate-400">{p.openaiModel || p.apiKey?.model}</div>}
+                      </td>
+                    )}
+                    <td className="num">{quota(p)}</td>
+                    <td className="num text-slate-900">{p.usage.total}</td>
+                    <td className="max-w-48 min-w-40 text-xs">
+                      <div className="truncate text-slate-900" title={p.assignedTo.map((a) => a.name).join(", ")}>
+                        {p.assignedTo.map((a) => a.name).join(", ") || <span className="text-slate-400">Nobody</span>}
+                      </div>
+                      {!!p.managers?.length && (
+                        <div className="truncate text-slate-500" title={p.managers.map((r) => r.name).join(", ")}>
+                          User: <span className="text-slate-700">{p.managers.map((r) => r.name).join(", ")}</span>
+                        </div>
+                      )}
+                    </td>
+                    <td className="actions">{rowActions(p)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
           </>
         )}

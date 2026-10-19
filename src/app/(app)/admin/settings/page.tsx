@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import { ArrowRight, ExternalLink, FlaskConical, Mail, RotateCcw, Save, Send } from "lucide-react";
 import { Alert, api, PageHeader, Section, Spinner, PageSkeleton } from "@/components/ui";
 import DateInput from "@/components/DateInput";
+import { useConfirm, useToast } from "@/components/Alerts";
 
 const TAG = "inline-flex items-center rounded-md px-1.5 py-0.5 text-xs font-medium whitespace-nowrap ring-1 ring-inset";
 const CODE = "rounded border border-slate-200 bg-slate-50 px-1 py-px font-mono text-[11px] text-slate-700";
@@ -52,8 +53,10 @@ export default function SettingsPage() {
   const [reportDay, setReportDay] = useState("");
   const [defaultPrompt, setDefaultPrompt] = useState("");
   const [sending, setSending] = useState(false);
-  const [msg, setMsg] = useState<{ kind: "error" | "success"; text: string } | null>(null);
+  const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const toast = useToast();
+  const confirm = useConfirm();
 
   useEffect(() => {
     api<{ settings: Settings; defaultResumePrompt: string }>("/api/admin/settings")
@@ -68,14 +71,14 @@ export default function SettingsPage() {
           resumePromptTemplate: s.resumePromptTemplate || defaultResumePrompt,
         });
       })
-      .catch((e) => setMsg({ kind: "error", text: e.message }));
+      .catch((e) => setError(e.message));
   }, []);
 
   async function save(e: React.FormEvent) {
     e.preventDefault();
     if (!form) return;
     setBusy(true);
-    setMsg(null);
+    setError("");
     try {
       await api("/api/admin/settings", { method: "PATCH", json: {
           ...form,
@@ -85,9 +88,9 @@ export default function SettingsPage() {
         },
       });
       // milestones are sent as a comma-separated string and normalised server-side
-      setMsg({ kind: "success", text: "Settings saved" });
+      toast.success("Settings saved");
     } catch (err) {
-      setMsg({ kind: "error", text: (err as Error).message });
+      setError((err as Error).message);
     } finally {
       setBusy(false);
     }
@@ -95,28 +98,28 @@ export default function SettingsPage() {
 
   async function sendReport(onlyMe: boolean) {
     setSending(true);
-    setMsg(null);
     try {
       const r = await api<{ day: string; sent: { email: string; ok: boolean; bids: number }[] }>("/api/admin/reports", {
         method: "POST",
         json: { day: reportDay || undefined, onlyMe },
       });
       const failed = r.sent.filter((x) => !x.ok).length;
-      setMsg({
-        kind: failed ? "error" : "success",
-        text: `Report for ${r.day} sent to ${r.sent.length - failed} recipient(s)${failed ? `, ${failed} failed` : ""}: ${r.sent.map((x) => x.email).join(", ") || "none"}`,
+      toast({
+        tone: failed ? (failed === r.sent.length ? "error" : "warning") : "success",
+        title: `Report for ${r.day} sent to ${r.sent.length - failed} recipient(s)${failed ? `, ${failed} failed` : ""}`,
+        description: r.sent.map((x) => x.email).join(", ") || "none",
       });
     } catch (err) {
-      setMsg({ kind: "error", text: (err as Error).message });
+      toast.error("Couldn't send the report", (err as Error).message);
     } finally {
       setSending(false);
     }
   }
 
   if (!form)
-    return msg ? (
+    return error ? (
       <div className="mx-auto max-w-3xl">
-        <Alert>{msg.text}</Alert>
+        <Alert>{error}</Alert>
       </div>
     ) : (
       <PageSkeleton variant="form" />
@@ -127,7 +130,7 @@ export default function SettingsPage() {
   return (
     <form onSubmit={save} className="mx-auto max-w-3xl space-y-6">
       <PageHeader title="Settings" subtitle="Global configuration, fees, and the My Page announcement." />
-      {msg && <Alert kind={msg.kind}>{msg.text}</Alert>}
+      {error && <Alert>{error}</Alert>}
 
       <Section title="General" description="Site identity, default fees and application rules.">
         <div className="grid gap-x-4 gap-y-5 md:grid-cols-2">
@@ -219,7 +222,17 @@ export default function SettingsPage() {
               type="button"
               className="btn btn-secondary btn-sm"
               disabled={isDefaultPrompt}
-              onClick={() => confirm("Replace the prompt with the default ResumeGPT prompt?") && setForm({ ...form, resumePromptTemplate: defaultPrompt })}
+              onClick={async () => {
+                if (
+                  await confirm({
+                    title: "Reset the prompt?",
+                    message: "Your edits are replaced with the default ResumeGPT prompt. Nothing is saved until you click Save settings.",
+                    confirmLabel: "Reset to default",
+                    danger: true,
+                  })
+                )
+                  setForm((f) => f && { ...f, resumePromptTemplate: defaultPrompt });
+              }}
             >
               <RotateCcw />
               Reset to default
@@ -306,7 +319,14 @@ export default function SettingsPage() {
             <button type="button" className="btn btn-secondary" disabled={sending} onClick={() => sendReport(true)}>
               {sending ? <Spinner /> : <Mail />} Send to me
             </button>
-            <button type="button" className="btn btn-secondary" disabled={sending} onClick={() => confirm("Email this report to all admins and users now?") && sendReport(false)}>
+            <button
+              type="button"
+              className="btn btn-secondary"
+              disabled={sending}
+              onClick={async () => {
+                if (await confirm({ title: "Send the report to everyone?", message: "The daily report is emailed now to all admins and users.", confirmLabel: "Send to all" })) sendReport(false);
+              }}
+            >
               <Send />
               Send to all now
             </button>

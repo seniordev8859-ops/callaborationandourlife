@@ -28,6 +28,8 @@ export type AccountRow = {
   managedProfiles?: { _id: string; label: string }[];
   createdAt: string;
   lastLoginAt?: string;
+  /** "preset:<id>" or a photo URL (components/Avatar.tsx); "" = initials. */
+  avatar?: string;
   usage: { generated: number; submitted: number; fees: number; monthGenerated: number; monthFees: number; lastGeneratedAt: string | null };
 };
 export type ProfileOpt = { _id: string; label: string; fullName: string; active: boolean };

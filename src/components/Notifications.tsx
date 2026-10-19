@@ -1,11 +1,30 @@
 "use client";
 
-import { ArrowRight, Bell, X } from "lucide-react";
+import {
+  AlarmClock,
+  ArrowRight,
+  Bell,
+  CalendarCheck,
+  CalendarClock,
+  CalendarPlus,
+  CalendarX,
+  ClipboardCheck,
+  IdCard,
+  Inbox,
+  Megaphone,
+  MessageSquare,
+  MessageSquareReply,
+  Trophy,
+  UserCheck,
+  UserPlus,
+} from "lucide-react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import Lightbox from "./Lightbox";
-import { api, fmtDate, fmtDateTime, Modal } from "./ui";
+import { useToast } from "./Alerts";
+import { api, fmtDate, fmtDateTime, Modal, type IconType } from "./ui";
 
 export type Note = {
   _id: string;
@@ -15,7 +34,47 @@ export type Note = {
   senderName: string;
   createdAt: string;
   read: boolean;
+  /** "message" (sent by an admin) or what happened (lib/inbox.ts NoticeKind). */
+  kind: string;
+  tone: "info" | "success" | "warning" | "danger";
+  /** Page to open for an event; "" for admin messages (they open in a dialog). */
+  url: string;
 };
+
+const KIND_ICON: Record<string, IconType> = {
+  message: Megaphone,
+  "interview-request": Inbox,
+  "interview-scheduled": CalendarCheck,
+  "interview-open": CalendarPlus,
+  "interview-result": ClipboardCheck,
+  "interview-cancelled": CalendarX,
+  "interview-overdue": AlarmClock,
+  "interview-reminder": CalendarClock,
+  "interview-report-due": ClipboardCheck,
+  "interview-digest": CalendarClock,
+  assignment: IdCard,
+  "account-signup": UserPlus,
+  "account-status": UserCheck,
+  "feedback-new": MessageSquare,
+  "feedback-reply": MessageSquareReply,
+  milestone: Trophy,
+};
+const TONE_STYLE: Record<Note["tone"], string> = {
+  info: "border-indigo-200 bg-indigo-50 text-indigo-600",
+  success: "border-emerald-200 bg-emerald-50 text-emerald-600",
+  warning: "border-amber-200 bg-amber-50 text-amber-600",
+  danger: "border-rose-200 bg-rose-50 text-rose-600",
+};
+
+/** The notification's type icon, colored by how it went (green: done, amber: needs you, red: cancelled…). */
+export function NoteIcon({ n, size = "md" }: { n: Pick<Note, "kind" | "tone">; size?: "sm" | "md" }) {
+  const Icon = KIND_ICON[n.kind] ?? Bell;
+  return (
+    <span className={`grid shrink-0 place-items-center rounded-lg border ${TONE_STYLE[n.tone] ?? TONE_STYLE.info} ${size === "sm" ? "size-7" : "size-8"}`}>
+      <Icon className={size === "sm" ? "size-3.5" : "size-4"} />
+    </span>
+  );
+}
 type Ctx = { items: Note[]; unread: number; open: (n: Note) => void; markAll: () => void; reload: () => void };
 
 const NotesContext = createContext<Ctx>({ items: [], unread: 0, open: () => {}, markAll: () => {}, reload: () => {} });
@@ -58,8 +117,10 @@ export function NotificationProvider({ children, enabled = true }: { children: R
   const [unread, setUnread] = useState(0);
   const [viewing, setViewing] = useState<Note | null>(null);
   const [popup, setPopup] = useState<Note[] | null>(null);
-  const [toast, setToast] = useState<Note | null>(null);
   const known = useRef<Set<string> | null>(null);
+  const router = useRouter();
+  const toast = useToast();
+  const openRef = useRef<(n: Note) => void>(() => {});
 
   const load = useCallback(async () => {
     try {
@@ -76,17 +137,24 @@ export function NotificationProvider({ children, enabled = true }: { children: R
           markPopped(fresh.map((n) => n._id));
         }
       } else {
-        const fresh = unreadItems.find((n) => !known.current!.has(n._id));
-        if (fresh) {
-          setToast(fresh);
-          markPopped([fresh._id]);
-        }
+        // New while they work: a toast each (oldest first), with a button to open it.
+        const fresh = unreadItems.filter((n) => !known.current!.has(n._id)).reverse();
+        for (const n of fresh)
+          toast({
+            title: n.title,
+            description: n.body,
+            icon: KIND_ICON[n.kind] ?? Bell,
+            tone: n.tone === "danger" ? "error" : n.tone,
+            duration: 8000,
+            action: { label: n.url ? "Open" : "View", onClick: () => openRef.current(n) },
+          });
+        if (fresh.length) markPopped(fresh.map((n) => n._id));
       }
       known.current = new Set(r.items.map((n) => n._id));
     } catch {
       /* signed out or offline: try again on the next poll */
     }
-  }, []);
+  }, [toast]);
 
   useEffect(() => {
     if (!enabled) return; // bidders: no bell, pop-ups or polling
@@ -100,12 +168,6 @@ export function NotificationProvider({ children, enabled = true }: { children: R
     };
   }, [load, enabled]);
 
-  useEffect(() => {
-    if (!toast) return;
-    const t = setTimeout(() => setToast(null), 8000);
-    return () => clearTimeout(t);
-  }, [toast]);
-
   const markRead = useCallback((n: Note) => {
     if (n.read) return;
     setItems((xs) => xs.map((x) => (x._id === n._id ? { ...x, read: true } : x)));
@@ -113,14 +175,16 @@ export function NotificationProvider({ children, enabled = true }: { children: R
     api(`/api/notifications/${n._id}/read`, { method: "POST" }).catch(() => {});
   }, []);
 
+  // An event opens its page; an admin's message opens in a dialog.
   const open = useCallback(
     (n: Note) => {
-      setViewing(n);
-      setToast(null);
       markRead(n);
+      if (n.url) router.push(n.url);
+      else setViewing(n);
     },
-    [markRead],
+    [markRead, router],
   );
+  openRef.current = open;
 
   const markAll = useCallback(() => {
     setItems((xs) => xs.map((x) => ({ ...x, read: true })));
@@ -159,23 +223,6 @@ export function NotificationProvider({ children, enabled = true }: { children: R
         </Modal>
       )}
 
-      {toast && (
-        <div role="status" className="popover fixed right-4 bottom-4 z-50 w-[calc(100vw-2rem)] max-w-80 animate-pop-in p-3.5">
-          <div className="flex items-start gap-3">
-            <div className="grid size-8 shrink-0 place-items-center rounded-lg border border-indigo-200 bg-indigo-50 text-indigo-600">
-              <Bell className="size-4" />
-            </div>
-            <button className="min-w-0 flex-1 cursor-pointer text-left" onClick={() => open(toast)}>
-              <div className="text-xs font-medium text-indigo-600">New notification</div>
-              <div className="mt-0.5 truncate text-sm font-medium text-slate-900">{toast.title}</div>
-              <div className="mt-0.5 line-clamp-2 text-[13px] text-slate-500">{toast.body}</div>
-            </button>
-            <button className="btn btn-ghost btn-icon -mt-1.5 -mr-1.5" onClick={() => setToast(null)} aria-label="Dismiss">
-              <X />
-            </button>
-          </div>
-        </div>
-      )}
     </NotesContext.Provider>
   );
 }
@@ -183,8 +230,10 @@ export function NotificationProvider({ children, enabled = true }: { children: R
 export function NoteBody({ n, compact }: { n: Note; compact?: boolean }) {
   const [slide, setSlide] = useState<number | null>(null);
   return (
-    <div className={compact ? "rounded-lg border border-slate-200 p-4" : ""}>
-      {compact && <div className="text-sm font-semibold text-slate-900">{n.title}</div>}
+    <div className={compact ? "flex gap-3 rounded-lg border border-slate-200 p-4" : ""}>
+      {compact && <NoteIcon n={n} />}
+      <div className="min-w-0 flex-1">
+      {compact && <div className="text-sm font-semibold text-slate-900">{n.url ? <Link href={n.url} className="hover:text-indigo-600">{n.title}</Link> : n.title}</div>}
       <div className={`mb-3 flex flex-wrap items-center gap-x-1.5 text-xs text-slate-500 ${compact ? "mt-0.5" : ""}`}>
         <span>
           From <span className="font-medium text-slate-700">{n.senderName}</span>
@@ -204,6 +253,7 @@ export function NoteBody({ n, compact }: { n: Note; compact?: boolean }) {
         </div>
       )}
       {slide !== null && <Lightbox slides={n.images.map((i) => ({ url: i.url, caption: n.title }))} start={slide} onClose={() => setSlide(null)} />}
+      </div>
     </div>
   );
 }
@@ -301,14 +351,16 @@ export function NotificationBell({ className = "" }: { className?: string }) {
                       setShow(false);
                       open(n);
                     }}
-                    className={`flex w-full cursor-pointer gap-3 border-b border-slate-200/60 px-4 py-3 text-left transition-colors hover:bg-slate-50 ${n.read ? "" : "bg-indigo-50/40"}`}
+                    className={`relative flex w-full cursor-pointer gap-3 border-b border-slate-200/60 px-4 py-3 text-left transition-colors hover:bg-slate-50 ${n.read ? "" : "bg-indigo-50/40"}`}
                   >
-                    <span className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${n.read ? "bg-transparent" : "bg-indigo-600"}`} />
+                    {!n.read && <span aria-label="Unread" className="absolute top-1/2 left-1.5 size-1.5 -translate-y-1/2 rounded-full bg-indigo-600" />}
+                    <NoteIcon n={n} size="sm" />
                     <span className="min-w-0 flex-1">
                       <span className={`block truncate text-sm ${n.read ? "text-slate-700" : "font-semibold"}`}>{n.title}</span>
                       <span className="line-clamp-2 block text-xs text-slate-500">{n.body || (n.images.length ? `${n.images.length} image(s)` : "")}</span>
                       <span className="block text-[11px] text-slate-400">
-                        {n.senderName} · {ago(n.createdAt)}
+                        {n.kind === "message" ? `${n.senderName} · ` : ""}
+                        {ago(n.createdAt)}
                       </span>
                     </span>
                   </button>

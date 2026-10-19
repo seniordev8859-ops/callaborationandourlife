@@ -5,6 +5,7 @@ import { User } from "@/lib/models/User";
 import { isOurCloudinaryUrl, SCREENSHOT_FOLDER } from "@/lib/cloudinary";
 import { appUrl, sendEmail } from "@/lib/email";
 import { feedbackEmail } from "@/lib/messageEmails";
+import { notify } from "@/lib/inbox";
 
 const CATEGORIES = ["bug", "idea", "question", "other"];
 
@@ -38,6 +39,7 @@ export const POST = handler(async (req: Request) => {
   after(async () => {
     const admins = await User.find({ role: "admin", status: "approved", _id: { $ne: user._id } }).select("name email").lean();
     const url = `${appUrl()}/admin/feedback?id=${fb._id}`;
+    await notify(admins, { kind: "feedback-new", title: `New ${category}: ${subject}`, body: `${user.name}: ${message.slice(0, 200)}`, url: `/admin/feedback?id=${fb._id}` });
     await Promise.all(
       admins.map((a) =>
         sendEmail(

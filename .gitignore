@@ -1,8 +1,9 @@
 node_modules
 .next
 out
-.env
-.env*.local
+# Any env file (including names with spaces, e.g. ".env production"); only the example is committed.
+.env*
+!.env.example
 .vercel
 *.tsbuildinfo
 next-env.d.ts

@@ -86,6 +86,22 @@ export function handler<A extends unknown[]>(fn: (...args: A) => Promise<Respons
   };
 }
 
+/**
+ * Like handler() but not recorded in the activity log: for requests that repeat every few seconds or minutes
+ * (presence heartbeats, the Interview Assistant saving a recording), which would flood the log.
+ */
+export function quietHandler<A extends unknown[]>(fn: (...args: A) => Promise<Response>) {
+  return async (...args: A) => {
+    try {
+      return await fn(...args);
+    } catch (e) {
+      if (e instanceof HttpError) return NextResponse.json({ error: e.message }, { status: e.status });
+      console.error(e);
+      return NextResponse.json({ error: e instanceof Error ? e.message : "Server error" }, { status: 500 });
+    }
+  };
+}
+
 /** `maxAge` in seconds; `null` makes a browser-session cookie that is cleared when the browser closes. */
 export function setSessionCookie(res: NextResponse, token: string, maxAge: number | null = 60 * 60 * 24 * 7) {
   res.cookies.set(SESSION_COOKIE, token, {

@@ -1,14 +1,16 @@
 "use client";
 
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
-import { Suspense, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { Suspense, useState, type MouseEvent } from "react";
 import { useRole } from "@/components/AppShell";
+import { useConfirm, useToast } from "@/components/Alerts";
+import { ActionMenu, type ActionItem } from "@/components/ActionMenu";
 import Lightbox, { type Slide } from "@/components/Lightbox";
 import PostingLink from "@/components/PostingLink";
 import ReadDot from "@/components/ReadDot";
 import { useColumns } from "@/components/ColumnPicker";
-import { ArrowRight, Check, CircleCheck, CircleDollarSign, Clock, Download, ExternalLink, FileArchive, FileDown, FileText, Inbox, Search, Send, Trash2, Undo2, Wallet, X } from "lucide-react";
+import { ArrowRight, Check, CircleCheck, CircleDollarSign, Clock, Download, ExternalLink, Eye, FileArchive, FileDown, FileText, Inbox, Search, Send, Trash2, Undo2, Wallet, X } from "lucide-react";
 import { Alert, api, Badge, notGeneratedReason, DateRangeFilter, downloadFile, EmptyState, fmtStamp, money, PageHeader, Pagination, rangeParams, Spinner, TableSkeleton, Stat, useAsync, usePageSize, limitParam } from "@/components/ui";
 
 type Person = { _id: string; name: string; email: string };
@@ -68,23 +70,21 @@ function History() {
   const [bulk, setBulk] = useState("");
   const [busyId, setBusyId] = useState("");
   const [viewer, setViewer] = useState<{ slides: Slide[]; start: number } | null>(null);
-  const [error, setError] = useState("");
-  const [notice, setNotice] = useState("");
+  const toast = useToast();
+  const confirm = useConfirm();
+  const router = useRouter();
   const cols = useColumns("application-history", [
     { key: "no", label: "No" },
-    { key: "generated", label: "Generate-Date" },
-    { key: "submitted", label: "Submit-Date" },
+    { key: "generated", label: "Generated" },
+    { key: "submitted", label: "Submitted" },
     { key: "profile", label: "Profile" },
     { key: "user", label: "User" },
     { key: "bidder", label: "Bidder" },
     { key: "company", label: "Company" },
     { key: "role", label: "Role" },
     { key: "status", label: "Status" },
-    { key: "screenshot", label: "Screenshot" },
-    { key: "download", label: "Download" },
-    ...(isAdmin ? [{ key: "delete", label: "Delete" }] : []),
-    ...(isAdmin ? [{ key: "paid", label: "Paid mark" }] : []),
-    { key: "other", label: "Other" },
+    { key: "screenshot", label: "Screenshots" },
+    { key: "other", label: "Fee" },
   ]);
 
   const users = useAsync(() => api<{ users: Person[] }>("/api/admin/users").then((r) => r.users), []);
@@ -119,13 +119,12 @@ function History() {
 
   async function exportZip(content: "all" | "resume") {
     setExporting(content);
-    setError("");
     try {
       const p = params();
       p.set("content", content);
       await downloadFile(`/api/admin/applications/export?${p}`, "export.zip");
     } catch (e) {
-      setError((e as Error).message);
+      toast.error("Export failed", (e as Error).message);
     } finally {
       setExporting("");
     }
@@ -133,11 +132,10 @@ function History() {
 
   async function download(a: Item, format: "zip" | "resume-pdf") {
     setBusyId(`${a._id}:${format}`);
-    setError("");
     try {
       await downloadFile(`/api/applications/${a._id}/download${format === "zip" ? "" : "?format=resume-pdf"}`, format === "zip" ? "application.zip" : "resume.pdf");
     } catch (e) {
-      setError((e as Error).message);
+      toast.error("Download failed", (e as Error).message);
     } finally {
       setBusyId("");
     }
@@ -152,7 +150,7 @@ function History() {
     try {
       await api(`/api/applications/${a._id}/read`, { method: "POST", json: { read } });
     } catch (e) {
-      setError((e as Error).message);
+      toast.error((e as Error).message);
       list.reload();
     }
   }
@@ -160,18 +158,16 @@ function History() {
   async function setPaidMark(ids: string[], value: boolean) {
     if (!ids.length) return;
     setBulk(value ? "paid" : "unpaid");
-    setError("");
-    setNotice("");
     try {
       const r = await api<{ matched: number; skipped: number }>("/api/admin/applications/paid", { method: "POST", json: { ids, paid: value } });
-      setNotice(
-        `${r.matched} application(s) marked as ${value ? "paid" : "not paid"}.` +
-          (r.skipped ? ` ${r.skipped} skipped: only submitted applications carry a fee.` : "")
+      toast.success(
+        `${r.matched} application(s) marked as ${value ? "paid" : "not paid"}`,
+        r.skipped ? `${r.skipped} skipped: only submitted applications carry a fee.` : undefined
       );
       if (ids.length > 1) setSelected(new Set());
       list.reload();
     } catch (e) {
-      setError((e as Error).message);
+      toast.error((e as Error).message);
     } finally {
       setBulk("");
     }
@@ -180,11 +176,15 @@ function History() {
   async function removeSelected() {
     const paidIds = items.filter((x) => selected.has(x._id) && x.paid).map((x) => x._id);
     const ids = [...selected].filter((id) => !paidIds.includes(id));
-    if (!ids.length) return setError("Paid applications can't be deleted.");
-    if (!ids.length || !confirm(`Permanently delete ${ids.length} application(s)? This removes their documents, screenshots and fees.`)) return;
+    if (!ids.length) return toast.warning("Paid applications can't be deleted.");
+    const ok = await confirm({
+      title: `Delete ${ids.length} application(s)?`,
+      message: `This permanently removes their documents, screenshots and fees.${paidIds.length ? ` ${paidIds.length} paid application(s) are kept.` : ""}`,
+      confirmLabel: "Delete permanently",
+      danger: true,
+    });
+    if (!ok) return;
     setBulk("delete");
-    setError("");
-    setNotice("");
     const failed: string[] = [];
     for (const id of ids) {
       try {
@@ -194,19 +194,27 @@ function History() {
       }
     }
     setSelected(new Set([...failed, ...paidIds]));
-    if (paidIds.length) setError(`${paidIds.length} paid application(s) were kept: paid applications can't be deleted.`);
-    if (failed.length) setError(`${failed.length} application(s) could not be deleted.`);
+    if (ids.length > failed.length) toast.success(`${ids.length - failed.length} application(s) deleted`);
+    if (paidIds.length) toast.warning(`${paidIds.length} paid application(s) were kept`, "Paid applications can't be deleted.");
+    if (failed.length) toast.error(`${failed.length} application(s) could not be deleted.`);
     setBulk("");
     list.reload();
   }
 
   async function remove(a: Item) {
-    if (!confirm(`Permanently delete the ${a.status} application "${a.company} / ${a.jobTitle}"? This also removes it from billing.`)) return;
+    const ok = await confirm({
+      title: "Delete this application?",
+      message: `The ${a.status.replace(/_/g, "-")} application "${a.company} / ${a.jobTitle}" is permanently deleted and removed from billing.`,
+      confirmLabel: "Delete permanently",
+      danger: true,
+    });
+    if (!ok) return;
     try {
       await api(`/api/applications/${a._id}`, { method: "DELETE" });
+      toast.success("Application deleted", `${a.company} · ${a.jobTitle}`);
       list.reload();
     } catch (e) {
-      setError((e as Error).message);
+      toast.error((e as Error).message);
     }
   }
 
@@ -224,19 +232,35 @@ function History() {
 
   async function downloadSelected(content: "resume" | "all") {
     const ids = downloadable.map((x) => x._id);
-    if (!selected.size) return setError("No resumes selected. Tick the applications you want to download, then try again.");
-    if (!ids.length) return setError("None of the selected applications have documents yet (not generated).");
-    if (ids.length > 100) return setError("Select 100 applications or fewer per download, or use the filtered download buttons above.");
+    if (!selected.size) return toast.warning("No resumes selected", "Tick the applications you want to download, then try again.");
+    if (!ids.length) return toast.warning("Nothing to download", "None of the selected applications have documents yet (not generated).");
+    if (ids.length > 100) return toast.warning("Too many selected", "Select 100 applications or fewer per download, or use the filtered download buttons above.");
     setBulk(content);
-    setError("");
     try {
       await downloadFile("/api/applications/bulk-download", content === "resume" ? "resumes.zip" : "applications.zip", { ids, content });
     } catch (e) {
-      setError((e as Error).message);
+      toast.error("Download failed", (e as Error).message);
     } finally {
       setBulk("");
     }
   }
+
+  const menuItems = (a: Item, notGenerated: boolean): ActionItem[] => [
+    { label: "Open", icon: Eye, onSelect: () => router.push(`/applications/${a._id}`) },
+    { label: "Download ZIP", icon: FileArchive, disabled: notGenerated || !!busyId, onSelect: () => download(a, "zip") },
+    { label: "Resume PDF", icon: FileDown, disabled: notGenerated || !!busyId, onSelect: () => download(a, "resume-pdf") },
+    ...(isAdmin && a.paid ? [{ label: "Mark as not paid", icon: Undo2, disabled: !!bulk, onSelect: () => setPaidMark([a._id], false) }] : []),
+    ...(isAdmin
+      ? ["divider" as const, { label: a.paid ? "Paid: can't delete" : "Delete", icon: Trash2, danger: true, disabled: !!a.paid, onSelect: () => remove(a) }]
+      : []),
+  ];
+
+  // Clicking a row opens the application, unless the click was on a control inside it.
+  const openRow = (e: MouseEvent, a: Item) => {
+    if ((e.target as HTMLElement).closest("a, button, input, label, img")) return;
+    router.push(`/applications/${a._id}`);
+  };
+
   return (
     <div className="mx-auto max-w-[1600px]">
       <PageHeader
@@ -311,17 +335,6 @@ function History() {
           </div>
         </div>
       </div>
-
-      {error && (
-        <div className="mb-4">
-          <Alert>{error}</Alert>
-        </div>
-      )}
-      {notice && (
-        <div className="mb-4">
-          <Alert kind="success">{notice}</Alert>
-        </div>
-      )}
 
       {selected.size > 0 && (
         <div className="popover sticky top-16 z-10 mb-3 flex animate-fade-in flex-wrap items-center gap-x-3 gap-y-2 px-3 py-2 text-[13px]">
@@ -403,20 +416,20 @@ function History() {
                       onChange={(e) => items.forEach((x) => toggle(x._id, e.target.checked))}
                     />
                   </th>
-                  <th data-col="no" className="text-right">No</th>
-                  <th data-col="generated">Generate-Date</th>
-                  <th data-col="submitted">Submit-Date</th>
+                  <th data-col="no" className="num">No</th>
+                  <th data-col="generated">Generated</th>
+                  <th data-col="submitted">Submitted</th>
                   <th data-col="profile">Profile</th>
                   <th data-col="user">User</th>
                   <th data-col="bidder">Bidder</th>
                   <th data-col="company">Company</th>
                   <th data-col="role">Role</th>
                   <th data-col="status">Status</th>
-                  <th data-col="screenshot">Screenshot</th>
-                  <th data-col="download">Download</th>
-                  {isAdmin && <th data-col="delete">Delete</th>}
-                  {isAdmin && <th data-col="paid">Paid mark</th>}
-                  <th data-col="other">Other</th>
+                  <th data-col="screenshot">Screenshots</th>
+                  <th data-col="other">Fee</th>
+                  <th className="actions">
+                    <span className="sr-only">Actions</span>
+                  </th>
                 </tr>
               </thead>
               <tbody>
@@ -424,11 +437,15 @@ function History() {
                   const notGenerated = a.status === "not_generated";
                   const submitted = a.status === "submitted";
                   return (
-                    <tr key={a._id} className={selected.has(a._id) ? "bg-indigo-50/70" : a.viewed ? "" : "bg-indigo-50/30"}>
+                    <tr
+                      key={a._id}
+                      className={`cursor-pointer ${selected.has(a._id) ? "bg-indigo-50/70" : a.viewed ? "" : "bg-indigo-50/30"}`}
+                      onClick={(e) => openRow(e, a)}
+                    >
                       <td>
                         <input type="checkbox" className="size-4 rounded align-middle" aria-label="Select application" checked={selected.has(a._id)} onChange={(e) => toggle(a._id, e.target.checked)} />
                       </td>
-                      <td data-col="no" className="text-right text-xs text-slate-400 tabular-nums">{offset + i + 1}</td>
+                      <td data-col="no" className="num text-xs text-slate-400">{offset + i + 1}</td>
                       <td data-col="generated" className="font-mono text-xs whitespace-nowrap text-slate-600">{fmtStamp(a.createdAt)}</td>
                       <td data-col="submitted" className="font-mono text-xs whitespace-nowrap text-slate-600">{a.submittedAt ? fmtStamp(a.submittedAt) : <span className="text-slate-400">—</span>}</td>
                       <td data-col="profile" className="whitespace-nowrap">{a.profile?.label ?? (a.profileLabel ? <span className="text-slate-400">{a.profileLabel} (deleted)</span> : "—")}</td>
@@ -512,50 +529,6 @@ function History() {
                           {!a.screenshots.length && <span className="text-xs text-slate-400">—</span>}
                         </div>
                       </td>
-                      <td data-col="download" className="whitespace-nowrap">
-                        <div className="-ml-2 flex gap-0.5">
-                          <button className="btn btn-ghost btn-sm" onClick={() => download(a, "zip")} disabled={notGenerated || !!busyId} title={notGenerated ? "Not generated yet" : "All documents (ZIP)"}>
-                            {busyId === `${a._id}:zip` ? <Spinner className="size-3.5" /> : <FileArchive />}
-                            ZIP
-                          </button>
-                          <button className="btn btn-ghost btn-sm" onClick={() => download(a, "resume-pdf")} disabled={notGenerated || !!busyId} title={notGenerated ? "Not generated yet" : "Resume PDF"}>
-                            {busyId === `${a._id}:resume-pdf` ? <Spinner className="size-3.5" /> : <FileDown />}
-                            Resume PDF
-                          </button>
-                        </div>
-                      </td>
-                      {isAdmin && (
-                        <td data-col="delete">
-                          <button
-                            className="btn btn-ghost btn-sm -ml-2 text-rose-600 hover:bg-rose-50 hover:text-rose-700"
-                            onClick={() => remove(a)}
-                            disabled={!!a.paid}
-                            title={a.paid ? "Paid applications can't be deleted" : undefined}
-                          >
-                            <Trash2 />
-                            Delete
-                          </button>
-                        </td>
-                      )}
-                      {isAdmin && (
-                        <td data-col="paid" className="whitespace-nowrap">
-                          {submitted ? (
-                            <button
-                              className={`btn btn-sm ${a.paid ? "btn-ghost -ml-2" : "btn-secondary"}`}
-                              onClick={() => setPaidMark([a._id], !a.paid)}
-                              disabled={!!bulk}
-                              title={a.paid ? "Undo the paid mark" : "Mark this fee as paid"}
-                            >
-                              {a.paid ? <Undo2 /> : <Check />}
-                              {a.paid ? "Unmark" : "Set paid"}
-                            </button>
-                          ) : (
-                            <span className="text-xs text-slate-400" title="Only submitted applications carry a fee">
-                              —
-                            </span>
-                          )}
-                        </td>
-                      )}
                       <td data-col="other" className="whitespace-nowrap">
                         {submitted ? (
                           <>
@@ -568,6 +541,26 @@ function History() {
                         ) : (
                           <span className="text-xs text-slate-400">No fee</span>
                         )}
+                      </td>
+                      <td className="actions">
+                        <div className="flex items-center justify-end gap-1">
+                          {isAdmin && submitted && !a.paid && (
+                            <button className="btn btn-secondary btn-sm" onClick={() => setPaidMark([a._id], true)} disabled={!!bulk} title="Mark this fee as paid">
+                              <Check />
+                              Set paid
+                            </button>
+                          )}
+                          <button
+                            className="btn btn-ghost btn-sm btn-icon"
+                            onClick={() => download(a, "zip")}
+                            disabled={notGenerated || !!busyId}
+                            aria-label="Download all documents (ZIP)"
+                            title={notGenerated ? "Not generated yet" : "All documents (ZIP)"}
+                          >
+                            {busyId === `${a._id}:zip` ? <Spinner className="size-3.5" /> : <Download />}
+                          </button>
+                          <ActionMenu items={menuItems(a, notGenerated)} label={`More actions for ${a.company || "this application"}`} />
+                        </div>
                       </td>
                     </tr>
                   );

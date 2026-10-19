@@ -4,12 +4,14 @@ import { Suspense, useState } from "react";
 import InterviewBoard from "@/components/InterviewBoard";
 import ScheduleInterviewForm from "@/components/ScheduleInterviewForm";
 import { Plus } from "lucide-react";
-import { Alert, Modal, PageHeader } from "@/components/ui";
+import { useToast } from "@/components/Alerts";
+import { noticeParts } from "@/components/interviews";
+import { Modal, PageHeader } from "@/components/ui";
 
 export default function Page() {
   // Callers can book interviews for their profiles, for themselves or another caller assigned to the profile.
   const [creating, setCreating] = useState<{ day?: string } | null>(null);
-  const [notice, setNotice] = useState("");
+  const toast = useToast();
   const [version, setVersion] = useState(0);
   return (
     <div className="mx-auto max-w-7xl">
@@ -23,11 +25,6 @@ export default function Page() {
           </button>
         }
       />
-      {notice && (
-        <div className="mb-4">
-          <Alert kind="success">{notice}</Alert>
-        </div>
-      )}
       {creating && (
         <Modal open wide onClose={() => setCreating(null)} title="Schedule an interview">
           <ScheduleInterviewForm
@@ -35,7 +32,7 @@ export default function Page() {
             onCancel={() => setCreating(null)}
             onDone={(msg) => {
               setCreating(null);
-              setNotice(msg);
+              toast.success(...noticeParts(msg));
               setVersion((v) => v + 1);
             }}
           />

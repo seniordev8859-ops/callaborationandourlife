@@ -1,14 +1,14 @@
 import { NextResponse } from "next/server";
 import { handler, HttpError, requireUser } from "@/lib/auth";
 import { Feedback } from "@/lib/models/Feedback";
-import { Message } from "@/lib/models/Message";
+import { notify } from "@/lib/inbox";
 import { oid } from "@/lib/query";
 
 type Ctx = { params: Promise<{ id: string }> };
 
 /**
  * Admin: PATCH { status?, reply?, seen? }.
- * A reply is also delivered to the sender as an in-app notification.
+ * A reply is also delivered to the sender as an in-app notification (lib/inbox.ts).
  */
 export const PATCH = handler(async (req: Request, { params }: Ctx) => {
   const admin = await requireUser("admin");
@@ -25,15 +25,7 @@ export const PATCH = handler(async (req: Request, { params }: Ctx) => {
     fb.replies.push({ by: admin._id, byName: admin.name, message: reply, at: new Date() });
     if (fb.status === "new") fb.status = "in_progress";
     if (!fb.seenAt) fb.seenAt = new Date();
-    await Message.create({
-      title: `Reply to your feedback: ${fb.subject}`,
-      body: reply,
-      audience: { roles: [], users: [fb.user] },
-      recipients: [fb.user],
-      email: false,
-      sender: admin._id,
-      senderName: admin.name,
-    });
+    await notify([fb.user], { kind: "feedback-reply", title: `Reply to your feedback: ${fb.subject}`, body: `${admin.name}: ${reply}`, url: `/feedback?id=${fb._id}` });
   }
   await fb.save();
   return NextResponse.json({ ok: true });

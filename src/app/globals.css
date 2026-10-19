@@ -76,6 +76,15 @@
   --shadow-pop: 0 0 0 1px rgb(0 0 0 / 0.04), 0 8px 24px -6px rgb(0 0 0 / 0.12), 0 2px 6px -2px rgb(0 0 0 / 0.06);
 }
 
+@keyframes toast-progress {
+  from {
+    width: 100%;
+  }
+  to {
+    width: 0%;
+  }
+}
+
 @keyframes page-in {
   from {
     opacity: 0;
@@ -306,23 +315,40 @@
   .table {
     @apply w-full text-left text-[13px];
   }
+  /* One look for every table: quiet uppercase header, cells centred vertically, a soft row hover. */
   .table th {
-    @apply border-b px-3 py-2.5 text-xs font-medium whitespace-nowrap text-slate-500 first:pl-5 last:pr-5;
+    @apply h-10 border-b px-3 text-left text-[11px] font-semibold tracking-wide whitespace-nowrap text-slate-500 uppercase first:pl-5 last:pr-5;
     border-color: var(--line);
     background-color: var(--page);
   }
   .table td {
-    @apply border-b px-3 py-3 align-top first:pl-5 last:pr-5;
+    @apply border-b px-3 py-3 align-middle first:pl-5 last:pr-5;
     border-color: var(--line);
+  }
+  /* Opt back in to top alignment for rows whose cells hold several lines that should line up at the top. */
+  .table.table-top td {
+    @apply align-top;
   }
   .table tbody tr {
     @apply transition-colors duration-100;
   }
   .table tbody tr:hover {
-    background-color: color-mix(in srgb, var(--surface-raised) 55%, transparent);
+    background-color: color-mix(in srgb, var(--surface-raised) 70%, transparent);
   }
   .table tbody tr:last-child td {
     @apply border-b-0;
+  }
+  /* Numbers: right-aligned, same-width digits. */
+  .table .num {
+    @apply text-right whitespace-nowrap tabular-nums;
+  }
+  /* Header stays in view inside a scrolling table container. */
+  .table thead th {
+    @apply sticky top-0 z-[1];
+  }
+  /* The cell with a row's action buttons: never wraps, sits at the right edge. */
+  .table .actions {
+    @apply w-px text-right whitespace-nowrap;
   }
 
   /* ---- small things */

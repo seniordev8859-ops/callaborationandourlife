@@ -4,6 +4,9 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { use, useState } from "react";
 import { useRole } from "@/components/AppShell";
+import { PresenceLabel } from "@/components/Presence";
+import { ActionMenu } from "@/components/ActionMenu";
+import { useConfirm, useToast } from "@/components/Alerts";
 import { DEFAULT_TZ, zoneName } from "@/lib/viewerTz";
 import { AccountModal, CredentialsPanel, ROLE_LABEL, StatusBadge, type AccountRow, type ProfileOpt, type Role } from "@/components/Accounts";
 import { ArrowRight, Briefcase, CalendarDays, Check, Coins, FileText, History, Inbox, Pencil, Percent, Power, PowerOff, Send, Trash } from "lucide-react";
@@ -34,18 +37,25 @@ export default function AccountView({ params }: { params: Promise<{ id: string }
   const profiles = useAsync(() => api<{ profiles: ProfileOpt[] }>("/api/admin/profiles").then((r) => r.profiles), []);
   const [editing, setEditing] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [msg, setMsg] = useState<{ kind: "error" | "success"; text: string } | null>(null);
+  const toast = useToast();
+  const confirm = useConfirm();
   const [manual, setManual] = useState<{ name: string; email: string; password: string; role: Role; reason: string } | null>(null);
 
   async function resendInvite() {
     if (!data) return;
     const u = data.user;
-    if (!confirm(`Send ${u.name} a new invitation? A new temporary password replaces the current one.`)) return;
+    if (
+      !(await confirm({
+        title: `Send ${u.name} a new invitation?`,
+        message: "A new temporary password replaces the current one, so their old password stops working.",
+        confirmLabel: "Send invitation",
+      }))
+    )
+      return;
     setBusy(true);
-    setMsg(null);
     try {
       const r = await api<{ invited: boolean; emailConfigured: boolean; password?: string }>(`/api/admin/users/${id}/invite`, { method: "POST" });
-      if (r.invited) setMsg({ kind: "success", text: `New sign-in details emailed to ${u.email}.` });
+      if (r.invited) toast.success("Invitation sent", `New sign-in details emailed to ${u.email}.`);
       else if (r.password)
         setManual({
           name: u.name,
@@ -58,7 +68,7 @@ export default function AccountView({ params }: { params: Promise<{ id: string }
         });
       reload();
     } catch (e) {
-      setMsg({ kind: "error", text: (e as Error).message });
+      toast.error((e as Error).message);
     } finally {
       setBusy(false);
     }
@@ -66,25 +76,48 @@ export default function AccountView({ params }: { params: Promise<{ id: string }
 
   async function setStatus(status: string, text: string) {
     setBusy(true);
-    setMsg(null);
     try {
       await api(`/api/admin/users/${id}`, { method: "PATCH", json: { status } });
-      setMsg({ kind: "success", text });
+      toast.success(text);
       reload();
     } catch (e) {
-      setMsg({ kind: "error", text: (e as Error).message });
+      toast.error((e as Error).message);
     } finally {
       setBusy(false);
     }
   }
 
+  async function deactivate() {
+    if (!data) return;
+    if (
+      !(await confirm({
+        title: `Deactivate ${data.user.name}?`,
+        message: "They will be signed out and cannot log in until the account is activated again.",
+        confirmLabel: "Deactivate",
+      }))
+    )
+      return;
+    setStatus("suspended", "Account deactivated.");
+  }
+
   async function remove() {
-    if (!data || !confirm(`Delete ${data.user.name}? Their application history is kept.`)) return;
+    if (!data) return;
+    const { name } = data.user;
+    if (
+      !(await confirm({
+        title: `Delete ${name}?`,
+        message: "The account is removed permanently. Their application history is kept.",
+        confirmLabel: "Delete account",
+        danger: true,
+      }))
+    )
+      return;
     try {
       await api(`/api/admin/users/${id}`, { method: "DELETE" });
+      toast.success(`${name} deleted`);
       router.replace("/admin/users");
     } catch (e) {
-      setMsg({ kind: "error", text: (e as Error).message });
+      toast.error((e as Error).message);
     }
   }
 
@@ -117,49 +150,38 @@ export default function AccountView({ params }: { params: Promise<{ id: string }
               <History />
               Application history
             </Link>
-            {isAdmin && (
-              <button className="btn btn-ghost btn-icon text-rose-600 hover:bg-rose-50 hover:text-rose-700" onClick={remove} aria-label="Delete" title="Delete">
-                <Trash />
-              </button>
-            )}
-            {isAdmin && (
-              <button className="btn btn-secondary" disabled={busy} onClick={resendInvite}>
-                <Send />
-                Resend invite
-              </button>
-            )}
             {isAdmin && u.status === "pending" && (
               <button className="btn btn-secondary" disabled={busy} onClick={() => setStatus("approved", "Account approved.")}>
-                <Check />
+                {busy ? <Spinner /> : <Check />}
                 Approve
-              </button>
-            )}
-            {isAdmin && u.status !== "pending" && (
-              <button
-                className="btn btn-secondary"
-                disabled={busy}
-                onClick={() =>
-                  u.status === "approved"
-                    ? confirm(`Deactivate ${u.name}? They will be signed out and cannot log in.`) && setStatus("suspended", "Account deactivated.")
-                    : setStatus("approved", "Account activated.")
-                }
-              >
-                {busy ? <Spinner /> : u.status === "approved" ? <PowerOff /> : <Power />}
-                {u.status === "approved" ? "Deactivate" : "Activate"}
               </button>
             )}
             <button className="btn btn-primary" onClick={() => setEditing(true)}>
               <Pencil />
               Edit
             </button>
+            {isAdmin && (
+              <ActionMenu
+                label={`More actions for ${u.name}`}
+                items={[
+                  { label: "Resend invite", icon: Send, disabled: busy, onSelect: resendInvite },
+                  ...(u.status === "pending"
+                    ? []
+                    : [
+                        u.status === "approved"
+                          ? { label: "Deactivate", icon: PowerOff, disabled: busy, onSelect: deactivate }
+                          : { label: "Activate", icon: Power, disabled: busy, onSelect: () => setStatus("approved", "Account activated.") },
+                      ]),
+                  "divider",
+                  { label: "Delete", icon: Trash, danger: true, onSelect: remove },
+                ]}
+              >
+                {busy && u.status !== "pending" ? <Spinner /> : undefined}
+              </ActionMenu>
+            )}
           </>
         }
       />
-      {msg && (
-        <div className="mb-6">
-          <Alert kind={msg.kind}>{msg.text}</Alert>
-        </div>
-      )}
 
       <div className="mb-6 grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
         <Stat label="This month" icon={CalendarDays} value={usage.monthGenerated} hint={isAdmin && u.role === "bidder" ? `${money(usage.monthFees)} in fees` : "applications"} />
@@ -185,6 +207,9 @@ export default function AccountView({ params }: { params: Promise<{ id: string }
             </Row>
             <Row label="Status">
               <StatusBadge status={u.status} />
+            </Row>
+            <Row label="Now">
+              <PresenceLabel userId={u._id} />
             </Row>
             <Row label="Joined">{fmtDate(u.createdAt)}</Row>
             <Row label="Last login">{fmtDateTime(u.lastLoginAt)}</Row>
@@ -231,16 +256,16 @@ export default function AccountView({ params }: { params: Promise<{ id: string }
                     <thead>
                       <tr>
                         <th>Profile</th>
-                        <th className="text-right">Generated</th>
-                        <th className="text-right">Submitted</th>
+                        <th className="num">Generated</th>
+                        <th className="num">Submitted</th>
                       </tr>
                     </thead>
                     <tbody>
                       {byProfilePage.pageRows.map((b) => (
                         <tr key={b._id}>
                           <td className="font-medium text-slate-900">{b.label || "—"}</td>
-                          <td className="text-right tabular-nums">{b.generated}</td>
-                          <td className="text-right tabular-nums">{b.submitted}</td>
+                          <td className="num">{b.generated}</td>
+                          <td className="num">{b.submitted}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -271,17 +296,17 @@ export default function AccountView({ params }: { params: Promise<{ id: string }
                       <tr>
                         <th>Date</th>
                         <th>Profile</th>
-                        <th>Company / Role</th>
+                        <th>Job</th>
                         <th>Status</th>
                       </tr>
                     </thead>
                     <tbody>
                       {recentPage.pageRows.map((a) => (
-                        <tr key={a._id}>
+                        <tr key={a._id} className="cursor-pointer" onClick={() => router.push(`/applications/${a._id}`)}>
                           <td className="text-xs whitespace-nowrap text-slate-500 tabular-nums">{fmtDateTime(a.createdAt)}</td>
                           <td className="min-w-32">{a.profile?.label ?? a.profileLabel ?? "—"}</td>
                           <td className="min-w-[12rem]">
-                            <Link href={`/applications/${a._id}`} className="font-medium text-slate-900 hover:text-indigo-600">
+                            <Link href={`/applications/${a._id}`} className="font-medium text-slate-900 hover:text-indigo-600" onClick={(e) => e.stopPropagation()}>
                               {a.company || "Unknown company"}
                             </Link>
                             <div className="text-xs text-slate-500">{a.jobTitle || "Untitled role"}</div>
@@ -315,7 +340,7 @@ export default function AccountView({ params }: { params: Promise<{ id: string }
           onClose={() => setEditing(false)}
           onSaved={(text) => {
             setEditing(false);
-            setMsg({ kind: "success", text });
+            toast.success(text);
             reload();
           }}
         />

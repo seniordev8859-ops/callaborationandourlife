@@ -4,6 +4,7 @@ import { User } from "./models/User";
 import { Settings, getSettings } from "./models/Settings";
 import { claim } from "./models/NotificationLog";
 import { appUrl, sendEmail } from "./email";
+import { notify, notifyEach } from "./inbox";
 import { companyKey } from "./company";
 import { APP_TZ, dayKey, dayRange, formatDateTime, formatDayLong, formatTime, isValidTimeZone, localHour, zoneName } from "./tz";
 import {
@@ -99,6 +100,20 @@ function details(r: Loaded, tz: string): InterviewDetails {
 
 const link = (path: string, id: unknown) => `${appUrl()}${path}?id=${id}`;
 
+/* In-app notifications (lib/inbox.ts) next to each email: same people, a short line instead of the details. */
+const inApp = (path: string, id: unknown) => `${path}?id=${id}`;
+const what = (r: Loaded) => [r.company || "Interview", r.jobTitle].filter(Boolean).join(" · ");
+const forProfile = (r: Loaded) => r.profile?.label ?? r.profileLabel;
+const OUTCOME: Record<string, { label: string; tone: "success" | "danger" | "warning" | "info" }> = {
+  passed: { label: "Passed", tone: "success" },
+  failed: { label: "Not passed", tone: "danger" },
+  waiting: { label: "Waiting for the result", tone: "info" },
+  no_show: { label: "No-show", tone: "warning" },
+};
+/** The same notification to each person, linked to their own page for the request. */
+const toResponsible = (people: Person[], r: Loaded, n: (p: Person) => Parameters<typeof notify>[1]) =>
+  notifyEach(people.map((p) => ({ to: [p], n: { ...n(p), url: inApp(pageFor(p, r), r._id) } })));
+
 /** Bidder + users managing the profile + admins (the "responsible" people for a request). */
 async function responsible(r: Loaded) {
   const staff = await User.find({
@@ -128,6 +143,12 @@ export async function notifyNewRequest(id: Types.ObjectId | string) {
     const r = await loadRequest(id);
     if (!r?.caller) return;
     const tz = callerTimezone(r.caller, await siteTz());
+    await notify([r.caller], {
+      kind: "interview-request",
+      title: "New interview request",
+      body: `${what(r)} for ${forProfile(r)}. Respond by ${fmtWhen(new Date(r.scheduleBy), tz)}.`,
+      url: inApp("/caller/requests", r._id),
+    });
     await sendEmail(
       r.caller.email,
       interviewRequestEmail({ name: r.caller.name, d: details(r, tz), deadline: fmtWhen(new Date(r.scheduleBy), tz), url: link("/caller/requests", r._id) })
@@ -143,6 +164,12 @@ export async function notifyAdminScheduled(id: Types.ObjectId | string, updated 
     const r = await loadRequest(id);
     if (!r?.caller || r.status !== "scheduled") return;
     const tz = callerTimezone(r.caller, await siteTz());
+    await notify([r.caller], {
+      kind: "interview-scheduled",
+      title: updated ? "Interview updated" : "Interview booked for you",
+      body: `${what(r)} for ${forProfile(r)}${r.scheduledAt ? ` · ${fmtWhen(new Date(r.scheduledAt), tz)}` : ""} · by ${r.requestedBy?.name ?? "an admin"}`,
+      url: inApp("/caller/schedule", r._id),
+    });
     await sendEmail(
       r.caller.email,
       interviewAssignedEmail({ name: r.caller.name, by: r.requestedBy?.name ?? "An admin", d: details(r, tz), url: link("/caller/schedule", r._id), updated })
@@ -159,6 +186,13 @@ export async function notifyOpen(id: Types.ObjectId | string, from: { id: string
     if (!r || r.status !== "open") return;
     const site = await siteTz();
     const callers = await User.find({ role: "caller", status: "approved", _id: { $ne: from.id } }).select(PERSON).lean<Person[]>();
+    await notify(callers, {
+      kind: "interview-open",
+      tone: "warning",
+      title: "Interview request available",
+      body: `${what(r)} for ${forProfile(r)}. ${from.name} handed it over${reason ? `: ${reason}` : "."}`,
+      url: inApp("/caller/requests", r._id),
+    });
     await Promise.all(
       callers.map((c) =>
         sendEmail(c.email, interviewOpenEmail({ name: c.name, from: from.name, reason, d: details(r, callerTimezone(c, site)), url: link("/caller/requests", r._id) }))
@@ -176,6 +210,16 @@ export async function notifyAccepted(id: Types.ObjectId | string, rescheduled = 
     if (!r || r.status !== "scheduled") return;
     const site = await siteTz();
     const people = await responsible(r);
+    await toResponsible(
+      people.filter((p) => String(p._id) !== String(r.caller?._id)),
+      r,
+      () => ({
+        kind: "interview-scheduled",
+        tone: "success",
+        title: rescheduled ? "Interview rescheduled" : "Interview scheduled",
+        body: `${what(r)} for ${forProfile(r)}${r.scheduledAt ? ` · ${fmtWhen(new Date(r.scheduledAt), site)}` : ""}${r.caller ? ` with ${r.caller.name}` : ""}`,
+      })
+    );
     await Promise.all(
       people
         .filter((p) => String(p._id) !== String(r.caller?._id))
@@ -193,6 +237,17 @@ export async function notifyReported(id: Types.ObjectId | string) {
     if (!r || r.status !== "completed" || !r.report?.outcome) return;
     const site = await siteTz();
     const people = await responsible(r);
+    const result = OUTCOME[r.report.outcome] ?? { label: r.report.outcome, tone: "info" as const };
+    await toResponsible(
+      people.filter((p) => String(p._id) !== String(r.caller?._id)),
+      r,
+      () => ({
+        kind: "interview-result",
+        tone: result.tone,
+        title: `Interview result: ${result.label}`,
+        body: `${what(r)} for ${forProfile(r)}${r.caller ? ` · reported by ${r.caller.name}` : ""}${r.report?.summary ? ` · ${r.report.summary.slice(0, 160)}` : ""}`,
+      })
+    );
     await Promise.all(
       people
         .filter((p) => String(p._id) !== String(r.caller?._id))
@@ -224,6 +279,13 @@ export async function notifyCancelled(id: Types.ObjectId | string, callerId: Typ
     const [r, caller] = await Promise.all([loadRequest(id), User.findById(callerId).select(PERSON).lean<Person>()]);
     if (!r || !caller) return;
     const tz = callerTimezone(caller, await siteTz());
+    await notify([caller], {
+      kind: "interview-cancelled",
+      tone: "danger",
+      title: "Interview cancelled",
+      body: `${what(r)} for ${forProfile(r)} · cancelled by ${by}${reason ? `: ${reason}` : ""}`,
+      url: inApp("/caller/requests", r._id),
+    });
     await sendEmail(caller.email, interviewCancelledEmail({ name: caller.name, by, reason, d: details(r, tz), url: link("/caller/requests", r._id) }));
   } catch (e) {
     console.error("interview cancelled email failed", e);
@@ -255,6 +317,12 @@ export async function runInterviewSweep(now = new Date()): Promise<SweepResult> 
     if (!r) continue;
     const callerName = r.status === "pending" ? r.caller?.name ?? null : null;
     const people = await responsible(r);
+    await toResponsible(people, r, () => ({
+      kind: "interview-overdue",
+      tone: "warning",
+      title: "Interview not scheduled in time",
+      body: `${what(r)} for ${forProfile(r)}: not scheduled within ${hours} h${callerName ? ` (waiting on ${callerName})` : ""}.`,
+    }));
     await Promise.all(
       people.map((p) =>
         sendEmail(p.email, interviewOverdueEmail({ name: p.name, caller: callerName, hours, d: details(r, tzFor(p, r, site)), url: link(pageFor(p, r), r._id) }))
@@ -278,6 +346,12 @@ export async function runInterviewSweep(now = new Date()): Promise<SweepResult> 
     if (!(await claim(`iv-remind:${s._id}:${new Date(s.scheduledAt!).getTime()}`, "interview-reminder"))) continue;
     const r = await loadRequest(s._id);
     if (!r || r.status !== "scheduled") continue;
+    await notify([c], {
+      kind: "interview-reminder",
+      title: `Interview in ${lead < 60 ? `${lead} min` : `${Math.round(lead / 60)} h`}`,
+      body: `${what(r)} for ${forProfile(r)} · ${fmtWhen(new Date(r.scheduledAt!), callerTimezone(c, site))}`,
+      url: inApp("/caller/schedule", r._id),
+    });
     await sendEmail(c.email, interviewReminderEmail({ name: c.name, minutes: lead, d: details(r, callerTimezone(c, site)), url: link("/caller/schedule", r._id) }));
     result.reminders++;
   }
@@ -292,6 +366,13 @@ export async function runInterviewSweep(now = new Date()): Promise<SweepResult> 
     if (!flagged.modifiedCount) continue;
     const r = await loadRequest(u._id);
     if (!r?.caller) continue;
+    await notify([r.caller], {
+      kind: "interview-report-due",
+      tone: "warning",
+      title: "Report the interview result",
+      body: `${what(r)} for ${forProfile(r)} ended over an hour ago. Add the result and your feedback.`,
+      url: inApp("/caller/requests", r._id),
+    });
     await sendEmail(r.caller.email, interviewReportReminderEmail({ name: r.caller.name, d: details(r, callerTimezone(r.caller, site)), url: link("/caller/requests", r._id) }));
     result.reportReminders++;
   }
@@ -310,6 +391,12 @@ export async function runInterviewSweep(now = new Date()): Promise<SweepResult> 
       .lean<(Loaded & { requestedBy: { name: string } | null })[]>();
     if (!items.length) continue;
     if (!(await claim(`iv-digest:${c._id}:${tomorrow.key}`, "interview-digest", { count: items.length }))) continue;
+    await notify([c], {
+      kind: "interview-digest",
+      title: `Tomorrow: ${items.length} interview${items.length === 1 ? "" : "s"}`,
+      body: items.map((i) => `${formatTime(new Date(i.scheduledAt!), tz)} ${i.company}`).join(" · "),
+      url: "/caller/schedule",
+    });
     await sendEmail(
       c.email,
       interviewDigestEmail({

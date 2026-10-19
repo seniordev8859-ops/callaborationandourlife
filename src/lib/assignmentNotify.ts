@@ -2,6 +2,7 @@ import type { Types } from "mongoose";
 import { Profile } from "./models/Profile";
 import { User } from "./models/User";
 import { appUrl, sendEmail } from "./email";
+import { notifyEach } from "./inbox";
 import { assignmentEmail } from "./emailTemplates";
 
 export type AccountSnapshot = {
@@ -54,6 +55,26 @@ export async function notifyAssignmentChanges(before: AccountSnapshot[], after: 
     const names = (ids: string[]) => ids.map((id) => label.get(id) ?? "A deleted profile");
     const url = appUrl();
 
+    const list = (ids: string[]) => names(ids).join(", ");
+    await notifyEach(
+      changes.map((c) => ({
+        to: [c.account._id],
+        n: {
+          kind: "assignment" as const,
+          title: "Your profiles changed",
+          body: [
+            c.generate.added.length && `You can now use: ${list(c.generate.added)}.`,
+            c.generate.removed.length && `No longer: ${list(c.generate.removed)}.`,
+            c.manage.added.length && `You now manage: ${list(c.manage.added)}.`,
+            c.manage.removed.length && `You no longer manage: ${list(c.manage.removed)}.`,
+            `Changed by ${actor.name}.`,
+          ]
+            .filter(Boolean)
+            .join(" "),
+          url: c.account.role === "bidder" ? "/dashboard/import" : c.account.role === "caller" ? "/profiles" : "/admin/profiles",
+        },
+      }))
+    );
     await Promise.all(
       changes.map((c) =>
         sendEmail(

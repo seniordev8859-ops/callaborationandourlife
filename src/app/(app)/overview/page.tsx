@@ -83,43 +83,43 @@ export default function OverviewPage() {
           </div>
         </div>
         <div className="overflow-x-auto">
-        <table className="table">
-          <thead>
-            <tr>
-              <th>{period === "weeks" ? "Week" : "Month"}</th>
-              <th className="text-right">Resumes created</th>
-              <th className="text-right">Submitted</th>
-              <th className="text-right">Submission rate</th>
-              <th className="text-right">Initial interviews</th>
-              <th className="text-right">Interview rate</th>
-            </tr>
-          </thead>
-          <tbody>
-            {[...buckets].reverse().map((b, i) => (
-              <tr key={b.key} className={i === 0 ? "font-medium" : ""}>
-                <td className="whitespace-nowrap">
-                  {b.label}
-                  {i === 0 && <span className="chip ml-2 font-normal">{period === "weeks" ? "this week" : "this month"}</span>}
-                </td>
-                <td className="text-right tabular-nums">{b.created}</td>
-                <td className="text-right tabular-nums">{b.submitted}</td>
-                <td className="text-right text-slate-500 tabular-nums">{pct(b.submitted, b.created)}</td>
-                <td className="text-right tabular-nums">{b.interviews}</td>
-                <td className="text-right text-slate-500 tabular-nums">{pct(b.interviews, b.submitted)}</td>
+          <table className="table">
+            <thead>
+              <tr>
+                <th>{period === "weeks" ? "Week" : "Month"}</th>
+                <th className="num">Created</th>
+                <th className="num">Submitted</th>
+                <th className="num">Submit rate</th>
+                <th className="num">Interviews</th>
+                <th className="num">Interview rate</th>
               </tr>
-            ))}
-          </tbody>
-          <tfoot>
-            <tr className="border-t border-slate-200 bg-slate-50 font-semibold [&>td]:border-b-0">
-              <td>All time</td>
-              <td className="text-right tabular-nums">{allTime.created}</td>
-              <td className="text-right tabular-nums">{allTime.submitted}</td>
-              <td className="text-right tabular-nums">{pct(allTime.submitted, allTime.created)}</td>
-              <td className="text-right tabular-nums">{allTime.interviews}</td>
-              <td className="text-right tabular-nums">{pct(allTime.interviews, allTime.submitted)}</td>
-            </tr>
-          </tfoot>
-        </table>
+            </thead>
+            <tbody>
+              {[...buckets].reverse().map((b, i) => (
+                <tr key={b.key} className={i === 0 ? "font-medium" : ""}>
+                  <td className="whitespace-nowrap">
+                    {b.label}
+                    {i === 0 && <span className="chip ml-2 font-normal">{period === "weeks" ? "this week" : "this month"}</span>}
+                  </td>
+                  <td className="num">{b.created}</td>
+                  <td className="num">{b.submitted}</td>
+                  <td className="num text-slate-500">{pct(b.submitted, b.created)}</td>
+                  <td className="num">{b.interviews}</td>
+                  <td className="num text-slate-500">{pct(b.interviews, b.submitted)}</td>
+                </tr>
+              ))}
+            </tbody>
+            <tfoot>
+              <tr className="border-t border-slate-200 bg-slate-50 font-semibold [&>td]:border-b-0">
+                <td>All time</td>
+                <td className="num">{allTime.created}</td>
+                <td className="num">{allTime.submitted}</td>
+                <td className="num">{pct(allTime.submitted, allTime.created)}</td>
+                <td className="num">{allTime.interviews}</td>
+                <td className="num">{pct(allTime.interviews, allTime.submitted)}</td>
+              </tr>
+            </tfoot>
+          </table>
         </div>
       </section>
     </div>

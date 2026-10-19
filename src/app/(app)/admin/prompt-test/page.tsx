@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import { FileText, FlaskConical, Info, Link2, RotateCcw, Save, Settings, Sparkles } from "lucide-react";
 import { Alert, api, EmptyState, PageHeader, Section, Spinner, useAsync } from "@/components/ui";
 import SearchSelect from "@/components/SearchSelect";
+import { useConfirm, useToast } from "@/components/Alerts";
 import ResumePreview, { LetterPreview } from "@/components/ResumePreview";
 import MatchScore from "@/components/MatchScore";
 import type { GenerationResult } from "@/lib/generate";
@@ -37,7 +38,8 @@ export default function PromptTestPage() {
   const [busy, setBusy] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
-  const [notice, setNotice] = useState("");
+  const toast = useToast();
+  const confirm = useConfirm();
   const [out, setOut] = useState<{ result: GenerationResult; designs?: Designs; meta: Meta } | null>(null);
   const [tab, setTab] = useState<(typeof TABS)[number]>("Resume");
 
@@ -63,7 +65,6 @@ export default function PromptTestPage() {
   async function run() {
     setBusy(true);
     setError("");
-    setNotice("");
     try {
       const r = await api<{ result: GenerationResult; designs?: Designs; meta: Meta }>("/api/admin/prompt-test", {
         method: "POST",
@@ -84,15 +85,21 @@ export default function PromptTestPage() {
   }
 
   async function saveToSettings() {
-    if (!confirm("Use this prompt for every resume generated from now on?")) return;
+    if (
+      !(await confirm({
+        title: "Make this the live prompt?",
+        message: "Every resume generated from now on uses this prompt and these extra instructions.",
+        confirmLabel: "Save to Settings",
+      }))
+    )
+      return;
     setSaving(true);
-    setError("");
     try {
       await api("/api/admin/settings", { method: "PATCH", json: { resumePromptTemplate: prompt, promptInstructions: extra } });
       saved.reload();
-      setNotice("Saved. Every new resume now uses this prompt.");
+      toast.success("Prompt saved to Settings", "Every new resume now uses this prompt.");
     } catch (e) {
-      setError((e as Error).message);
+      toast.error("Couldn't save the prompt", (e as Error).message);
     } finally {
       setSaving(false);
     }
@@ -110,11 +117,6 @@ export default function PromptTestPage() {
           </Link>
         }
       />
-      {notice && (
-        <div className="mb-4">
-          <Alert kind="success">{notice}</Alert>
-        </div>
-      )}
       {error && (
         <div className="mb-4">
           <Alert>{error}</Alert>

@@ -4,10 +4,12 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { use, useState } from "react";
 import { useRole } from "@/components/AppShell";
+import { useConfirm, useToast } from "@/components/Alerts";
 import ProfileDetails, { type ProfileDetail } from "@/components/ProfileDetails";
 import { DesignThumb } from "@/components/DesignPicker";
 import { DEFAULT_DESIGN, DESIGNS, isDesignId } from "@/lib/designs";
-import { Activity, CalendarDays, FileText, History, KeyRound, Pencil, Power, Sparkles, Trash2, UserPlus } from "lucide-react";
+import { ActionMenu } from "@/components/ActionMenu";
+import { Activity, CalendarDays, FileText, History, KeyRound, Pencil, Power, PowerOff, Sparkles, Trash2, UserPlus } from "lucide-react";
 import { Alert, api, ApiError, Badge, PageHeader, Section, Spinner, PageSkeleton, Stat, useAsync } from "@/components/ui";
 
 type Row = {
@@ -27,35 +29,74 @@ export default function ProfileView({ params }: { params: Promise<{ id: string }
   const isAdmin = useRole() === "admin";
   const detail = useAsync(() => api<{ profile: ProfileDetail & { active: boolean; resumeDesign?: string; coverLetterDesign?: string } }>(`/api/admin/profiles/${id}`).then((r) => r.profile), [id]);
   const meta = useAsync(() => api<{ profiles: Row[] }>("/api/admin/profiles").then((r) => r.profiles.find((p) => p._id === id) ?? null), [id]);
-  const [msg, setMsg] = useState<{ kind: "error" | "success"; text: string } | null>(null);
+  const toast = useToast();
+  const confirm = useConfirm();
   const [busy, setBusy] = useState(false);
 
   async function toggleActive() {
     if (!detail.data) return;
+    const { label, active } = detail.data;
+    if (
+      active &&
+      !(await confirm({
+        title: `Deactivate ${label}?`,
+        message: "Users can no longer generate applications with it until it is activated again.",
+        confirmLabel: "Deactivate",
+      }))
+    )
+      return;
     setBusy(true);
     try {
-      await api(`/api/admin/profiles/${id}`, { method: "PATCH", json: { active: !detail.data.active } });
-      setMsg({ kind: "success", text: detail.data.active ? "Profile deactivated." : "Profile activated." });
+      await api(`/api/admin/profiles/${id}`, { method: "PATCH", json: { active: !active } });
+      toast.success(active ? "Profile deactivated" : "Profile activated");
       detail.reload();
       meta.reload();
     } catch (e) {
-      setMsg({ kind: "error", text: (e as Error).message });
+      toast.error((e as Error).message);
     } finally {
       setBusy(false);
     }
   }
 
   async function remove() {
-    if (!detail.data || !confirm(`Delete the profile "${detail.data.label}"? This cannot be undone.`)) return;
+    if (!detail.data) return;
+    const { label } = detail.data;
+    if (
+      !(await confirm({
+        title: "Delete this profile?",
+        message: `"${label}" will be deleted permanently. This cannot be undone.`,
+        confirmLabel: "Delete profile",
+        danger: true,
+      }))
+    )
+      return;
     try {
       await api(`/api/admin/profiles/${id}`, { method: "DELETE" });
+      toast.success(`${label} deleted`);
       router.replace("/admin/profiles");
     } catch (e) {
       const err = e as ApiError;
-      if (err.status === 409 && err.data.history && confirm(`${err.message}\n\nDelete anyway? The history is kept under the old name.`)) {
-        await api(`/api/admin/profiles/${id}?force=1`, { method: "DELETE" });
-        router.replace("/admin/profiles");
-      } else if (err.status !== 409) setMsg({ kind: "error", text: err.message });
+      if (err.status === 409 && err.data.history) {
+        const ok = await confirm({
+          title: "Delete anyway?",
+          message: (
+            <>
+              <p>{err.message}</p>
+              <p className="mt-2">The history is kept under the old name.</p>
+            </>
+          ),
+          confirmLabel: "Delete anyway",
+          danger: true,
+        });
+        if (!ok) return;
+        try {
+          await api(`/api/admin/profiles/${id}?force=1`, { method: "DELETE" });
+          toast.success(`${label} deleted`, "Its history was kept.");
+          router.replace("/admin/profiles");
+        } catch (e2) {
+          toast.error((e2 as Error).message);
+        }
+      } else if (err.status !== 409) toast.error(err.message);
     }
   }
 
@@ -80,29 +121,27 @@ export default function ProfileView({ params }: { params: Promise<{ id: string }
               <UserPlus />
               Assign
             </Link>
-            {isAdmin && (
-              <>
-                <button className="btn btn-secondary" onClick={toggleActive} disabled={busy}>
-                  {busy ? <Spinner /> : <Power />} {p.active ? "Deactivate" : "Activate"}
-                </button>
-                <button className="btn btn-ghost text-rose-600 hover:bg-rose-50 hover:text-rose-700" onClick={remove}>
-                  <Trash2 />
-                  Delete
-                </button>
-              </>
-            )}
             <Link href={`/admin/profiles/${id}`} className="btn btn-primary">
               <Pencil />
               Edit
             </Link>
+            {isAdmin && (
+              <ActionMenu
+                label={`More actions for ${p.label}`}
+                items={[
+                  p.active
+                    ? { label: "Deactivate", icon: PowerOff, disabled: busy, onSelect: toggleActive }
+                    : { label: "Activate", icon: Power, disabled: busy, onSelect: toggleActive },
+                  "divider",
+                  { label: "Delete", icon: Trash2, danger: true, onSelect: remove },
+                ]}
+              >
+                {busy ? <Spinner /> : undefined}
+              </ActionMenu>
+            )}
           </>
         }
       />
-      {msg && (
-        <div className="mb-4">
-          <Alert kind={msg.kind}>{msg.text}</Alert>
-        </div>
-      )}
 
       <div className="mb-6 grid grid-cols-2 gap-4 lg:grid-cols-4">
         <Stat icon={Activity} label="Status" value={<Badge value={p.active ? "active" : "inactive"} />} hint={p.active ? "Available for generation" : "Hidden from users"} />

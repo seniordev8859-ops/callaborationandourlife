@@ -14,7 +14,9 @@ import {
   FilePlus2,
   Files,
   FlaskConical,
+  AudioLines,
   History,
+  Timer,
   IdCard,
   Inbox,
   KeyRound,
@@ -43,6 +45,8 @@ import { Avatar } from "./Avatar";
 import { Logo } from "./Logo";
 import { DEFAULT_TZ, setHomeTz, setInterviewTz, zoneName } from "@/lib/viewerTz";
 import { NotificationBell, NotificationProvider } from "./Notifications";
+import { OnlineMenu, PresenceProvider } from "./Presence";
+import { AlertsProvider } from "./Alerts";
 import { HelpButton } from "./HelpGuide";
 import type { IconType } from "./ui";
 
@@ -76,6 +80,7 @@ const BIDDER_PROFILES_LABEL = "View Profile's Information";
 const ADMIN_GENERAL: NavItem[] = [
   { href: "/admin", label: "Overview", icon: LayoutGrid, exact: true },
   { href: "/admin/analytics", label: "Analytics", icon: ChartNoAxesColumn },
+  { href: "/admin/work-time", label: "Work Time", icon: Timer, adminOnly: true },
 ];
 const ADMIN_MANAGE: NavItem[] = [
   { href: "/admin/users", label: "Users & Bidders", icon: Users },
@@ -83,6 +88,7 @@ const ADMIN_MANAGE: NavItem[] = [
   { href: "/admin/assignments", label: "Assignments", icon: Workflow },
   { href: "/admin/applications", label: "Application History", icon: History },
   { href: "/admin/interviews", label: "Interviews (Schedule)", icon: CalendarDays },
+  { href: "/interview-history", label: "Interview History", icon: AudioLines },
 ];
 const ADMIN_SYSTEM: NavItem[] = [
   { href: "/admin/notifications", label: "Notifications", icon: Megaphone, adminOnly: true },
@@ -97,6 +103,7 @@ const ADMIN_SYSTEM: NavItem[] = [
 const CALLER_NAV: NavItem[] = [
   { href: "/caller/requests", label: "Interview Requests", icon: Inbox },
   { href: "/caller/schedule", label: "My Schedule", icon: CalendarDays },
+  { href: "/interview-history", label: "Interview History", icon: AudioLines },
   { href: "/notifications", label: "Notifications", icon: Bell },
   { href: "/feedback", label: "Feedback", icon: MessageSquare },
   { href: "/help", label: "Help", icon: LifeBuoy },
@@ -117,7 +124,7 @@ function navFor(role: string, interviewAccess: boolean): NavSection[] {
     ];
   const admin = role === "admin";
   return [
-    { title: "General", items: ADMIN_GENERAL },
+    { title: "General", items: ADMIN_GENERAL.filter((i) => admin || !i.adminOnly) },
     { title: "Manage", items: ADMIN_MANAGE },
     ...(admin ? [{ title: "System", items: ADMIN_SYSTEM }] : []),
     { title: "Workspace", items: USER_NAV },
@@ -233,7 +240,9 @@ export default function AppShell({
   const toggleLabel = hidden ? "Show menu" : "Hide menu";
 
   return (
+    <AlertsProvider>
     <NotificationProvider>
+      <PresenceProvider>
       <div className="flex min-h-screen">
         {/* Mobile drawer backdrop */}
         {open && <div className="fixed inset-0 z-40 animate-fade-in bg-black/40 lg:hidden" onClick={() => setOpen(false)} aria-hidden />}
@@ -330,6 +339,7 @@ export default function AppShell({
               )}
             </nav>
             <div className="flex items-center gap-0.5">
+              <OnlineMenu />
               <HelpButton role={role} />
               <NotificationBell />
             </div>
@@ -353,7 +363,9 @@ export default function AppShell({
           </main>
         </div>
       </div>
+      </PresenceProvider>
     </NotificationProvider>
+    </AlertsProvider>
   );
 }
 

@@ -11,6 +11,7 @@ import ResumePreview from "@/components/ResumePreview";
 import MatchScore from "@/components/MatchScore";
 import JobInfoDialog from "@/components/JobInfoDialog";
 import { useRole } from "@/components/AppShell";
+import { useConfirm, useToast } from "@/components/Alerts";
 import { isUnknownCompany, isUntitledRole, missingJobInfo } from "@/lib/jobInfo";
 
 type Detail = {
@@ -55,7 +56,8 @@ export default function ApplicationDetail({
   const [tab, setTab] = useState<(typeof TABS)[number]>("Resume");
   const [coverLetter, setCoverLetter] = useState("");
   const [notes, setNotes] = useState("");
-  const [msg, setMsg] = useState<{ kind: "error" | "success"; text: string } | null>(null);
+  const toast = useToast();
+  const confirm = useConfirm();
   const [busy, setBusy] = useState("");
   const [viewer, setViewer] = useState<{ slides: Slide[]; start: number } | null>(null);
   const [fixing, setFixing] = useState<{ reason?: string } | null>(null);
@@ -70,13 +72,12 @@ export default function ApplicationDetail({
 
   async function patch(body: Record<string, unknown>, ok: string, key: string) {
     setBusy(key);
-    setMsg(null);
     try {
       await api(`/api/applications/${id}`, { method: "PATCH", json: body });
-      setMsg({ kind: "success", text: ok });
+      toast.success(ok);
       reload();
     } catch (e) {
-      setMsg({ kind: "error", text: (e as Error).message });
+      toast.error((e as Error).message);
     } finally {
       setBusy("");
     }
@@ -87,7 +88,7 @@ export default function ApplicationDetail({
     try {
       await downloadFile(`/api/applications/${id}/download`, "application.zip");
     } catch (e) {
-      setMsg({ kind: "error", text: (e as Error).message });
+      toast.error("Download failed", (e as Error).message);
     } finally {
       setBusy("");
     }
@@ -130,11 +131,6 @@ export default function ApplicationDetail({
           </>
         }
       />
-      {msg && (
-        <div className="mb-4">
-          <Alert kind={msg.kind}>{msg.text}</Alert>
-        </div>
-      )}
       {fixing && (
         <JobInfoDialog
           app={app}
@@ -143,7 +139,7 @@ export default function ApplicationDetail({
           onClose={() => setFixing(null)}
           onSaved={(m) => {
             setFixing(null);
-            setMsg({ kind: "success", text: `${m} You can submit it now.` });
+            toast.success(m, "You can submit it now.");
             reload();
           }}
         />
@@ -246,7 +242,10 @@ export default function ApplicationDetail({
                     </button>
                     <button
                       className="btn btn-secondary btn-sm absolute top-1.5 right-1.5 h-6 px-1.5 text-rose-600 opacity-0 group-hover:opacity-100 hover:text-rose-700 focus-visible:opacity-100 [@media(hover:none)]:opacity-100"
-                      onClick={() => confirm("Remove this screenshot?") && patch({ removeScreenshot: s.publicId }, "Screenshot removed", "rm")}
+                      onClick={async () => {
+                        if (!(await confirm({ title: "Remove this screenshot?", message: "It is deleted from this application's submission proof.", confirmLabel: "Remove screenshot", danger: true }))) return;
+                        patch({ removeScreenshot: s.publicId }, "Screenshot removed", "rm");
+                      }}
                     >
                       <Trash2 />
                       Remove
@@ -269,7 +268,7 @@ export default function ApplicationDetail({
                     // No company / role yet: explain why and let the bidder fill them in.
                     const missing = missingJobInfo(app);
                     if (missing) {
-                      setMsg({ kind: "error", text: missing });
+                      toast.warning("Can't submit yet", missing);
                       setFixing({ reason: missing });
                       return;
                     }

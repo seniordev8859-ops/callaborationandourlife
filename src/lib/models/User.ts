@@ -22,6 +22,10 @@ const UserSchema = new Schema(
     /** Profiles a "user" (manager role) manages and receives reports/notifications for. */
     managedProfiles: [{ type: Types.ObjectId, ref: "Profile" }],
     lastLoginAt: Date,
+    /** Presence (lib/presence.ts): last heartbeat from an open TailorBid tab or the Interview Assistant. */
+    lastSeenAt: Date,
+    /** Last mouse/keyboard input there (or a running interview in the assistant). */
+    lastActiveAt: Date,
     /** Set when an admin issues a temporary password; cleared when the owner changes it. */
     mustChangePassword: { type: Boolean, default: false },
     /** IANA time zone for showing times (My Page); "" = the site time zone (EST). */

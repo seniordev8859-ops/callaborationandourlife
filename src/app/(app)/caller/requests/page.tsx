@@ -8,6 +8,7 @@ import {
   InterviewStatus,
   LockBadge,
   Materials,
+  noticeParts,
   ReportDialog,
   Screens,
   ScheduleDialog,
@@ -21,6 +22,7 @@ import {
   type Interview,
 } from "@/components/interviews";
 import { CalendarCheck, CircleCheck, Clock, CornerDownRight, History, Inbox, Users } from "lucide-react";
+import { useToast } from "@/components/Alerts";
 import { Alert, api, Modal, PageHeader, CardSkeleton, EmptyState, useAsync, type IconType } from "@/components/ui";
 
 type Tab = "mine" | "open" | "scheduled" | "report" | "history";
@@ -52,7 +54,7 @@ function CallerRequests() {
   const [transfer, setTransfer] = useState<Interview | null>(null);
   const [report, setReport] = useState<Interview | null>(null);
   const [feedback, setFeedback] = useState<Interview | null>(null);
-  const [notice, setNotice] = useState<{ kind: "success" | "error"; text: string } | null>(null);
+  const toast = useToast();
 
   useEffect(() => {
     api<{ user: { id: string } }>("/api/me").then((r) => setMe(r.user.id)).catch(() => {});
@@ -99,7 +101,7 @@ function CallerRequests() {
     setTransfer(null);
     setReport(null);
     setView(null);
-    setNotice({ kind: "success", text });
+    toast.success(...noticeParts(text));
     data.reload();
   };
 
@@ -109,11 +111,6 @@ function CallerRequests() {
         title="Interview requests"
         subtitle="Schedule the interviews assigned to you. If you can't make it, transfer the request with a reason. Shared requests go to the first caller who accepts."
       />
-      {notice && (
-        <div className="mb-4">
-          <Alert kind={notice.kind}>{notice.text}</Alert>
-        </div>
-      )}
       <div className="-mx-4 mb-4 overflow-x-auto px-4 sm:mx-0 sm:px-0">
         <div className="segmented" role="group" aria-label="Requests">
           {TABS.map(([k, label, n]) => (

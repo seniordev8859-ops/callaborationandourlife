@@ -8,6 +8,7 @@ import {
   InterviewDetail,
   InterviewStatus,
   LockBadge,
+  noticeParts,
   OUTCOME_LABEL,
   ScreenshotDrop,
   StepBar,
@@ -19,9 +20,11 @@ import {
   type Interview,
   type Outcome,
 } from "@/components/interviews";
-import { ExternalLink, Inbox, Plus, Search, Send, Video } from "lucide-react";
+import { CircleX, ExternalLink, Eye, Inbox, Plus, Search, Send, Trash, Video } from "lucide-react";
 import { Alert, api, EmptyState, fmtDate, Modal, PageHeader, Segmented, Spinner, CardSkeleton, TableSkeleton, useAsync, useClientPaging } from "@/components/ui";
 import { useRole } from "@/components/AppShell";
+import { ActionMenu, type ActionItem } from "@/components/ActionMenu";
+import { useToast } from "@/components/Alerts";
 import SearchSelect from "@/components/SearchSelect";
 import { fromTzInput, getViewerTz, zoneName } from "@/lib/viewerTz";
 
@@ -67,7 +70,7 @@ function InterviewRequests() {
   const [cancel, setCancel] = useState<Interview | null>(null);
   const [remove, setRemove] = useState<Interview | null>(null);
   const isAdmin = useRole() === "admin";
-  const [notice, setNotice] = useState("");
+  const toast = useToast();
   const [creating, setCreating] = useState(false);
   useEffect(() => {
     if (sp.get("new") === "1") setCreating(true);
@@ -84,6 +87,13 @@ function InterviewRequests() {
     return tabs[tab].filter((i) => !needle || [i.company, i.jobTitle, i.profile?.label, i.caller?.name].some((s) => (s ?? "").toLowerCase().includes(needle)));
   }, [tab, q, list.data]); // eslint-disable-line react-hooks/exhaustive-deps
   const { pageRows, pager } = useClientPaging(rows, `my-interviews-${tab}`);
+  const canCancel = (i: Interview) => isActive(i) && !reportDue(i);
+  const menuItems = (i: Interview): ActionItem[] => [
+    { label: "View details", icon: Eye, onSelect: () => setView(i) },
+    "divider",
+    ...(canCancel(i) ? [{ label: "Cancel request", icon: CircleX, danger: true, onSelect: () => setCancel(i) }] : []),
+    ...(isAdmin ? [{ label: "Delete", icon: Trash, danger: true, onSelect: () => setRemove(i) }] : []),
+  ];
 
   // Deep link from emails: /interviews?id=...
   useEffect(() => {
@@ -107,11 +117,6 @@ function InterviewRequests() {
           </button>
         }
       />
-      {notice && (
-        <div className="mb-4">
-          <Alert kind="success">{notice}</Alert>
-        </div>
-      )}
       {creating && (
         <Modal open wide onClose={() => setCreating(false)} title="New interview request">
           <RequestForm
@@ -120,7 +125,7 @@ function InterviewRequests() {
             onCancel={() => setCreating(false)}
             onCreated={(msg) => {
               setCreating(false);
-              setNotice(msg);
+              toast.success(...noticeParts(msg));
               setTab("active");
               list.reload();
             }}
@@ -203,7 +208,7 @@ function InterviewRequests() {
                       <button className="btn btn-secondary btn-sm" onClick={() => setView(i)}>
                         View
                       </button>
-                      {isActive(i) && !reportDue(i) && (
+                      {canCancel(i) && (
                         <button className="btn btn-ghost btn-sm text-rose-600 hover:bg-rose-50 hover:text-rose-700" onClick={() => setCancel(i)}>
                           Cancel
                         </button>
@@ -219,17 +224,19 @@ function InterviewRequests() {
                 <tr>
                   <th>Step</th>
                   <th>When</th>
-                  <th>Company / Role</th>
+                  <th>Company</th>
                   <th>Caller</th>
                   <th>Status</th>
-                  <th />
+                  <th className="actions">
+                    <span className="sr-only">Actions</span>
+                  </th>
                 </tr>
               </thead>
               <tbody>
                 {pageRows.map((i) => {
                   const dl = ["pending", "open"].includes(i.status) ? deadlineLabel(i.scheduleBy) : null;
                   return (
-                    <tr key={i._id}>
+                    <tr key={i._id} className="cursor-pointer" onClick={() => setView(i)}>
                       <td className="whitespace-nowrap">
                         <StepBar step={i.step} />
                         {i.lockedCaller && (
@@ -259,22 +266,18 @@ function InterviewRequests() {
                         <InterviewStatus i={i} />
                         {dl && <div className={`mt-1 text-xs tabular-nums ${dl.late ? "text-rose-600" : "text-slate-500"}`}>{dl.text}</div>}
                         {i.status === "completed" && i.report?.recordingUrl && (
-                          <a href={i.report.recordingUrl} target="_blank" rel="noreferrer" className="link mt-1.5 inline-flex items-center gap-1 text-xs">
+                          <a href={i.report.recordingUrl} target="_blank" rel="noreferrer" className="link mt-1.5 inline-flex items-center gap-1 text-xs" onClick={(e) => e.stopPropagation()}>
                             <Video className="size-3.5" />
                             Recording
                           </a>
                         )}
                       </td>
-                      <td className="text-right whitespace-nowrap">
-                        <div className="flex flex-wrap items-center justify-end gap-1">
-                          <button className="btn btn-ghost btn-sm" onClick={() => setView(i)}>
-                            View
+                      <td className="actions">
+                        <div className="flex items-center justify-end gap-1" onClick={(e) => e.stopPropagation()}>
+                          <button className="btn btn-ghost btn-sm btn-icon" onClick={() => setView(i)} aria-label={`View ${i.company}`} title="View">
+                            <Eye />
                           </button>
-                          {isActive(i) && !reportDue(i) && (
-                            <button className="btn btn-ghost btn-sm text-rose-600 hover:bg-rose-50 hover:text-rose-700" onClick={() => setCancel(i)}>
-                              Cancel
-                            </button>
-                          )}
+                          {(canCancel(i) || isAdmin) && <ActionMenu items={menuItems(i)} label={`More actions for ${i.company}`} />}
                         </div>
                       </td>
                     </tr>
@@ -308,7 +311,7 @@ function InterviewRequests() {
           onDone={(m) => {
             setRemove(null);
             setView(null);
-            setNotice(m);
+            toast.success(...noticeParts(m));
             list.reload();
           }}
         />
@@ -319,7 +322,7 @@ function InterviewRequests() {
           onClose={() => setCancel(null)}
           onDone={(m) => {
             setCancel(null);
-            setNotice(m);
+            toast.success(...noticeParts(m));
             list.reload();
           }}
         />
