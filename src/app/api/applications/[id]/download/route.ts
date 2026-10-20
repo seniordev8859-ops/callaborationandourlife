@@ -1,9 +1,9 @@
 import { canManageProfile, handler, HttpError, requireUser } from "@/lib/auth";
 import { Application } from "@/lib/models/Application";
-import { applicationZip, baseFileName, resumePdf, zipFileName, zipResponse, type AppDocSource } from "@/lib/documents";
+import { applicationZip, baseFileName, coverLetterPdf, resumePdf, zipFileName, zipResponse, type AppDocSource } from "@/lib/documents";
 import { oid } from "@/lib/query";
 
-/** ZIP of all documents, or `?format=resume-pdf` for just the resume PDF. */
+/** ZIP of all documents, or `?format=resume-pdf` / `?format=cover-pdf` for just the resume or cover letter PDF. */
 export const GET = handler(async (req: Request, { params }: { params: Promise<{ id: string }> }) => {
   const user = await requireUser();
   const app = await Application.findById(oid((await params).id)).lean<
@@ -14,9 +14,11 @@ export const GET = handler(async (req: Request, { params }: { params: Promise<{ 
   if (!app || (!isOwner && !isRep && user.role !== "admin")) throw new HttpError(404, "Application not found");
   if (!app.resume) throw new HttpError(400, "This application has not been generated yet. Add the job description first.");
 
-  if (new URL(req.url).searchParams.get("format") === "resume-pdf") {
-    const name = `${baseFileName(app)}_Resume.pdf`;
-    return new Response((await resumePdf(app.resume, app.resumeDesign)) as unknown as BodyInit, {
+  const format = new URL(req.url).searchParams.get("format");
+  if (format === "resume-pdf" || format === "cover-pdf") {
+    const name = `${baseFileName(app)}_${format === "resume-pdf" ? "Resume" : "Cover_Letter"}.pdf`;
+    const pdf = format === "resume-pdf" ? await resumePdf(app.resume, app.resumeDesign) : await coverLetterPdf(app);
+    return new Response(pdf as unknown as BodyInit, {
       headers: {
         "Content-Type": "application/pdf",
         "Content-Disposition": `attachment; filename="${name.replace(/[^\x20-\x7e]/g, "_").replace(/"/g, "")}"; filename*=UTF-8''${encodeURIComponent(name)}`,

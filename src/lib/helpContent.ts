@@ -130,7 +130,7 @@ export const HELP_PAGES: HelpPage[] = [
       { title: "Upload the confirmation screenshot", detail: "After applying on the company site, click Upload (or drag / paste with Ctrl+V) to attach a screenshot of the confirmation page." },
       { title: "Click Submit", detail: "Submit becomes available once a screenshot is attached. The fee is charged at this moment." },
       { title: "Add a missing company or role", detail: "If a row shows Unknown company or Untitled role, click it and fill in what's missing (check the job posting). It can't be submitted until both are set; once set, they can't be changed." },
-      { title: "Download documents", detail: "Use ZIP or Resume PDF on a row, or tick several rows and use Download ZIP / Resumes only above the table. If nothing is ticked it tells you no resumes are selected." },
+      { title: "Download documents", detail: "Use ZIP, Resume PDF or Cover letter PDF on a row, or tick several rows and use Download ZIP / Resumes only / Resume PDFs / Cover letter PDFs above the table. If nothing is ticked it tells you no resumes are selected." },
       { title: "Customize columns", detail: "Use Columns to show or hide table columns; your choice is remembered." },
       { title: "Check payment status", detail: "The Other column shows whether each submitted application's fee is Paid or Not paid." },
     ],
@@ -352,7 +352,7 @@ export const HELP_PAGES: HelpPage[] = [
     steps: [
       { title: "Filter", detail: "Date range (YYYY-MM-DD), account, profile, status, payment (paid / not paid) and search." },
       { title: "Select rows", detail: "Tick rows (or the header box for the whole page). The bar shows the count and the fee total." },
-      { title: "Download", detail: "Above the table, Download ZIP (resume, cover letter & JD) or Resumes only downloads the ticked rows (it tells you if none are selected). The buttons at the top of the page download everything matching the filters." },
+      { title: "Download", detail: "Above the table, Download ZIP (resume, cover letter & JD), Resumes only, Resume PDFs or Cover letter PDFs downloads the ticked rows (it tells you if none are selected). The buttons at the top of the page download everything matching the filters." },
       { title: "Mark as paid (admin)", detail: "Use Mark as paid / not paid in the bar, or Set paid on a row. Only submitted applications carry a fee." },
       { title: "Delete (admin)", detail: "Delete removes an application permanently. Paid applications can't be deleted." },
       { title: "Customize columns", detail: "Use Columns to choose which columns are shown." },

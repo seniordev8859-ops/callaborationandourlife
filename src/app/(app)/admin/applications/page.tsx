@@ -130,10 +130,13 @@ function History() {
     }
   }
 
-  async function download(a: Item, format: "zip" | "resume-pdf") {
+  async function download(a: Item, format: "zip" | "resume-pdf" | "cover-pdf") {
     setBusyId(`${a._id}:${format}`);
     try {
-      await downloadFile(`/api/applications/${a._id}/download${format === "zip" ? "" : "?format=resume-pdf"}`, format === "zip" ? "application.zip" : "resume.pdf");
+      await downloadFile(
+        `/api/applications/${a._id}/download${format === "zip" ? "" : `?format=${format}`}`,
+        { zip: "application.zip", "resume-pdf": "resume.pdf", "cover-pdf": "cover-letter.pdf" }[format]
+      );
     } catch (e) {
       toast.error("Download failed", (e as Error).message);
     } finally {
@@ -230,14 +233,18 @@ function History() {
   const payableSelected = selectedItems.filter((x) => x.status === "submitted");
   const downloadable = selectedItems.filter((x) => x.status !== "not_generated");
 
-  async function downloadSelected(content: "resume" | "all") {
+  async function downloadSelected(content: "resume" | "all" | "resume-pdf" | "cover-pdf") {
     const ids = downloadable.map((x) => x._id);
     if (!selected.size) return toast.warning("No resumes selected", "Tick the applications you want to download, then try again.");
     if (!ids.length) return toast.warning("Nothing to download", "None of the selected applications have documents yet (not generated).");
     if (ids.length > 100) return toast.warning("Too many selected", "Select 100 applications or fewer per download, or use the filtered download buttons above.");
     setBulk(content);
     try {
-      await downloadFile("/api/applications/bulk-download", content === "resume" ? "resumes.zip" : "applications.zip", { ids, content });
+      // A single PDF comes down as the PDF itself rather than a ZIP with one file in it.
+      if ((content === "resume-pdf" || content === "cover-pdf") && ids.length === 1)
+        await downloadFile(`/api/applications/${ids[0]}/download?format=${content}`, content === "resume-pdf" ? "resume.pdf" : "cover-letter.pdf");
+      else
+        await downloadFile("/api/applications/bulk-download", { all: "applications.zip", resume: "resumes.zip", "resume-pdf": "resume-pdfs.zip", "cover-pdf": "cover-letter-pdfs.zip" }[content], { ids, content });
     } catch (e) {
       toast.error("Download failed", (e as Error).message);
     } finally {
@@ -249,6 +256,7 @@ function History() {
     { label: "Open", icon: Eye, onSelect: () => router.push(`/applications/${a._id}`) },
     { label: "Download ZIP", icon: FileArchive, disabled: notGenerated || !!busyId, onSelect: () => download(a, "zip") },
     { label: "Resume PDF", icon: FileDown, disabled: notGenerated || !!busyId, onSelect: () => download(a, "resume-pdf") },
+    { label: "Cover letter PDF", icon: FileText, disabled: notGenerated || !!busyId, onSelect: () => download(a, "cover-pdf") },
     ...(isAdmin && a.paid ? [{ label: "Mark as not paid", icon: Undo2, disabled: !!bulk, onSelect: () => setPaidMark([a._id], false) }] : []),
     ...(isAdmin
       ? ["divider" as const, { label: a.paid ? "Paid: can't delete" : "Delete", icon: Trash2, danger: true, disabled: !!a.paid, onSelect: () => remove(a) }]
@@ -381,6 +389,12 @@ function History() {
           </button>
           <button className="btn btn-secondary btn-sm" onClick={() => downloadSelected("resume")} disabled={!!bulk}>
             {bulk === "resume" ? <Spinner className="size-3.5" /> : <Download />} Resumes only (ZIP){downloadable.length ? ` (${downloadable.length})` : ""}
+          </button>
+          <button className="btn btn-secondary btn-sm" onClick={() => downloadSelected("resume-pdf")} disabled={!!bulk} title="Only the resume PDF of each selected application">
+            {bulk === "resume-pdf" ? <Spinner className="size-3.5" /> : <FileDown />} Resume PDFs{downloadable.length ? ` (${downloadable.length})` : ""}
+          </button>
+          <button className="btn btn-secondary btn-sm" onClick={() => downloadSelected("cover-pdf")} disabled={!!bulk} title="Only the cover letter PDF of each selected application">
+            {bulk === "cover-pdf" ? <Spinner className="size-3.5" /> : <FileText />} Cover letter PDFs{downloadable.length ? ` (${downloadable.length})` : ""}
           </button>
           <span className={`text-xs ${selected.size ? "text-slate-500" : "text-slate-400"}`}>
             {selected.size ? `${selected.size} selected` : "No resumes selected · tick rows to download them together"}
