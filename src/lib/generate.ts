@@ -3,7 +3,7 @@ import type { ResolvedOpenAI } from "./openaiKeys";
 import type { ProfileFields } from "./models/Profile";
 import { DEFAULT_RESUME_PROMPT } from "./resumePrompt";
 import { RESUME_HEADLINE } from "./headline";
-import { jobKeywords, type JobKeyword } from "./matchScore";
+import { jobKeywords, mentionsKeyword, resumeText as resumePlainText, scoreCoverLetter, type JobKeyword } from "./matchScore";
 
 export type ResumeExperience = {
   company: string;
@@ -287,9 +287,13 @@ Resume:
 - At least two of every three experience bullets include a number (%, $, count, time saved or scale).
 - Total length 450 to 900 words.
 Cover letter:
-- Name the company${job.company?.trim() ? ` (${job.company.trim()})` : ""} and the role ${title}.
-- Mention at least six of these top skills: ${top.join(", ") || "(none found)"}.
-- Include at least one concrete number or result; 250 to 400 words.`;
+- Name the company${job.company?.trim() ? ` ("${job.company.trim()}")` : " by its exact name from the posting"} in the first paragraph and once more later.
+  The rule against a header above the greeting only means no name / company / title lines before "Dear": the letter's
+  body must still name the company.
+- Name the role ${title} in the first paragraph.
+- Use each of these top skills by its exact spelling, tied to real work from the resume (at least eight of them):
+  ${top.join(", ") || "(none found)"}.
+- Include at least one concrete number or result; 280 to 400 words.`;
 }
 
 export function fillPrompt(template: string, p: ProfileFields) {
@@ -583,6 +587,71 @@ ${rules}`,
   }
 }
 
+/** Cover letters scoring at least this on the Job match card (with every check passing) are left as they are. */
+const LETTER_TARGET = 85;
+
+/**
+ * Raises a weak cover letter's Job match score: scores it exactly as the Job match card does and, if it misses the
+ * company, the role or the posting's top skills, asks for one focused revision that adds them. Only skills the tailored
+ * resume already shows are requested, so nothing is invented. Returns the revision only when it scores higher.
+ */
+async function improveCoverLetter(
+  openai: Pick<ResolvedOpenAI, "client" | "model">,
+  profile: ProfileFields,
+  resume: ResumeContent,
+  letter: string,
+  job: { text: string; company: string; role: string }
+) {
+  const before = scoreCoverLetter(letter, job.text, job.company, job.role);
+  if (before.score >= LETTER_TARGET && before.checks.every((c) => c.ok)) return null;
+  const resumeAll = resumePlainText(resume);
+  const skills = before.missing.filter((k) => mentionsKeyword(resumeAll, k.term) || k.alts?.some((t) => mentionsKeyword(resumeAll, t))).map((k) => k.term);
+  const failed = before.checks.filter((c) => !c.ok).map((c) => c.label);
+  const asks = [
+    job.company && `Name the company exactly as "${job.company}" in the first paragraph and once more later in the letter (the body, not a header).`,
+    job.role && `Name the role exactly as "${job.role}" in the first paragraph.`,
+    skills.length &&
+      `Work in each of these skills from the job description, spelled exactly like this, each tied to real work from the resume: ${skills.join(", ")}.`,
+    `Keep every skill the letter already names, and at least one concrete number or result from the resume.`,
+    `Length 280 to 400 words.`,
+  ].filter(Boolean);
+  try {
+    const res = await openai.client.chat.completions.create({
+      model: openai.model,
+      temperature: 0.5,
+      response_format: { type: "json_object" },
+      messages: [
+        {
+          role: "system",
+          content: `You revise a cover letter so it matches the job description more closely. Reply with JSON: {"coverLetter": string}.
+Keep its greeting, its paragraph structure, its tone and its sign-off ("Sincerely," then "${profile.fullName}") exactly. Plain text only:
+no headers above the greeting, no bold, bullets, links or dashes of any kind. Use only facts from the resume; never
+invent employers, metrics or credentials.
+Required changes:
+${asks.map((a) => `- ${a}`).join("\n")}
+
+${HUMAN_STYLE}`,
+        },
+        {
+          role: "user",
+          content: `Checks the current letter fails: ${failed.join("; ") || "none, but its score is low"}.\n\nCURRENT COVER LETTER:\n${letter}\n\nTAILORED RESUME:\n${resumeAll}\n\nJOB DESCRIPTION:\n${job.text.slice(0, 8000)}`,
+        },
+      ],
+    });
+    const out = JSON.parse(res.choices[0]?.message?.content ?? "{}") as { coverLetter?: unknown };
+    const revised = typeof out.coverLetter === "string" ? out.coverLetter.trim() : "";
+    const after = revised ? scoreCoverLetter(revised, job.text, job.company, job.role) : null;
+    return {
+      coverLetter: after && after.score > before.score ? revised : "",
+      promptTokens: res.usage?.prompt_tokens ?? 0,
+      completionTokens: res.usage?.completion_tokens ?? 0,
+    };
+  } catch (e) {
+    console.error("cover letter revision failed", e);
+    return null;
+  }
+}
+
 async function callModel(openai: Pick<ResolvedOpenAI, "client" | "model">, system: string, user: string) {
   try {
     const completion = await openai.client.chat.completions.create({
@@ -728,16 +797,31 @@ ${HUMAN_STYLE}`;
     }
   }
 
-  let coverLetter = cleanLetter(letterParagraphBreaks(parsed.coverLetter))
-    // "Dear Hiring Manager" → "Dear Hiring Manager," (traditional business letter)
-    .replace(/^(Dear [^\n,:]+?)\s*[:]?\s*$/m, "$1,")
-    // keep the sign-off and the name together on consecutive lines
-    .replace(/\n\s*\n(Sincerely|Best regards|Kind regards|Regards),?\s*\n\s*\n([^\n]+)\s*$/i, "\n\n$1,\n$2");
-  if (coverLetter && !/sincerely/i.test(coverLetter)) coverLetter += `\n\nSincerely,\n${profile.fullName}`;
+  const finishLetter = (raw: string) => {
+    const letter = cleanLetter(letterParagraphBreaks(raw))
+      // "Dear Hiring Manager" → "Dear Hiring Manager," (traditional business letter)
+      .replace(/^(Dear [^\n,:]+?)\s*[:]?\s*$/m, "$1,")
+      // keep the sign-off and the name together on consecutive lines
+      .replace(/\n\s*\n(Sincerely|Best regards|Kind regards|Regards),?\s*\n\s*\n([^\n]+)\s*$/i, "\n\n$1,\n$2");
+    return letter && !/sincerely/i.test(letter) ? `${letter}\n\nSincerely,\n${profile.fullName}` : letter;
+  };
+  let coverLetter = finishLetter(parsed.coverLetter);
+  const company = parsed.company || job.company || "";
+  const jobTitle = parsed.role || job.title || "";
+
+  // Weak Job match (company, role or top skills missing): one focused revision, kept only if it scores higher.
+  if (coverLetter) {
+    const better = await improveCoverLetter(openai, profile, resume, coverLetter, { text: job.text, company, role: jobTitle });
+    if (better) {
+      if (better.coverLetter) coverLetter = finishLetter(better.coverLetter);
+      promptTokens += better.promptTokens;
+      completionTokens += better.completionTokens;
+    }
+  }
 
   return {
-    company: parsed.company || job.company || "",
-    jobTitle: parsed.role || job.title || "",
+    company,
+    jobTitle,
     jobLocation: job.location || "",
     jobDescription: job.text,
     resume,

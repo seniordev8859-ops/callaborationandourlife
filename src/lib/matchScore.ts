@@ -194,6 +194,8 @@ const has = (text: string, term: string): boolean => {
   if (m ? count(text, m) > 0 : termRe(term).test(text)) return true;
   return (IMPLIED_BY[term] ?? []).some((t) => { const x = MATCHERS.find((y) => y.name === t); return !!x && count(text, x) > 0; });
 };
+/** Whether `text` mentions the keyword (or a skill that implies it), exactly as the score counts it. */
+export const mentionsKeyword = has;
 const softHas = (text: string, phrase: string) => text.toLowerCase().includes(phrase);
 const wordCount = (s: string) => (s.match(/\b[\w'’+#.-]+\b/g) ?? []).length;
 const titleWords = (title: string) =>
