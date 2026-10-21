@@ -4,6 +4,8 @@ import type { Types } from "mongoose";
 import { connectDB } from "./db";
 import { User, type UserDoc } from "./models/User";
 import { SESSION_COOKIE, verifySession, type Role } from "./session";
+import { canCallApi, governsApi } from "./pageAccess";
+import { getDisabledPages } from "./pageAccessStore";
 
 export class HttpError extends Error {
   constructor(public status: number, message: string) {
@@ -51,6 +53,15 @@ export function canManageProfile(user: UserDoc, profileId: unknown) {
   return scope === null || scope.some((p) => String(p) === String(profileId));
 }
 
+/** APIs behind pages an admin turned off for this role (Admin → Page Access) answer 403. */
+async function assertApiAccess(req: Request) {
+  const { pathname } = new URL(req.url);
+  if (!governsApi(pathname, req.method)) return;
+  const user = await currentUser();
+  if (!user || canCallApi(user.role, pathname, req.method, await getDisabledPages())) return;
+  throw new HttpError(403, "This page is turned off for your role. Ask an administrator for access.");
+}
+
 /**
  * Wraps a route handler so thrown HttpErrors become JSON responses,
  * and records the request in the activity log (lib/activity.ts) after the response.
@@ -69,6 +80,7 @@ export function handler<A extends unknown[]>(fn: (...args: A) => Promise<Respons
     let res: Response;
     let error: unknown;
     try {
+      if (req) await assertApiAccess(req);
       res = await fn(...args);
     } catch (e) {
       error = e;

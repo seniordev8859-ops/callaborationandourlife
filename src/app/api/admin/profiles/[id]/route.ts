@@ -1,10 +1,11 @@
-import { NextResponse } from "next/server";
+import { after, NextResponse } from "next/server";
 import { canManageProfile, handler, HttpError, requireStaff, requireUser } from "@/lib/auth";
 import { Profile } from "@/lib/models/Profile";
 import { Application } from "@/lib/models/Application";
 import { User } from "@/lib/models/User";
 import { profileUpdate, setProfileManager } from "@/lib/profileInput";
 import { oid } from "@/lib/query";
+import { recordProfileChange } from "@/lib/profileNotify";
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -28,11 +29,14 @@ export const PATCH = handler(async (req: Request, { params }: Ctx) => {
     // Users (managers) edit profile content only; keys, model, quota and activation stay with admins.
     for (const k of ["apiKey", "openaiModel", "monthlyQuota", "active"]) delete data[k];
   }
+  const before = await Profile.findById(id).lean<Record<string, unknown>>();
   const profile = await Profile.findByIdAndUpdate(id, data, {
     new: true,
     runValidators: true,
   });
-  if (!profile) throw new HttpError(404, "Profile not found");
+  if (!profile || !before) throw new HttpError(404, "Profile not found");
+  // Tell the bidders, callers and users of this profile what changed (after the response).
+  after(() => recordProfileChange(id, before, data, staff));
   if (staff.role === "admin" && "manager" in body) await setProfileManager(id, body.manager);
   return NextResponse.json({ ok: true });
 });

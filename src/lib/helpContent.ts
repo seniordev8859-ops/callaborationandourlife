@@ -88,7 +88,7 @@ export const HELP_PAGES: HelpPage[] = [
     title: "Generate an application",
     path: "/dashboard",
     match: ["/dashboard"],
-    roles: STAFF_WORKSPACE,
+    roles: WORKSPACE,
     summary: "Create a tailored resume, cover letter and job description from a full-time job posting.",
     steps: [
       { title: "Choose the profile", detail: "Pick the candidate profile to apply with. The remaining monthly quota is shown under it." },

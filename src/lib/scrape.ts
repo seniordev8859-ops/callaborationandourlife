@@ -135,12 +135,90 @@ async function scrapeWorkable(url: URL): Promise<ScrapedJob | null> {
   };
 }
 
+const CLOSED_JOB = "This job posting is closed or no longer exists, so nothing was generated. Check the link, or paste the job description manually.";
+
+/**
+ * Greenhouse job from the link alone: {board}/jobs/{id} on greenhouse.io, the embed URL (?for=board&token=id),
+ * or a company careers page with ?gh_jid={id} (board unknown until the page is read).
+ */
+function greenhouseRef(url: URL): { board: string; id: string } | null {
+  const host = url.hostname.toLowerCase();
+  const q = url.searchParams;
+  if (host.endsWith("greenhouse.io")) {
+    if (q.get("for") && /^\d+$/.test(q.get("token") ?? "")) return { board: q.get("for")!, id: q.get("token")! };
+    const m = url.pathname.match(/^\/([\w-]+)\/jobs\/(\d+)/);
+    if (m && m[1] !== "embed") return { board: m[1], id: m[2] };
+  }
+  const id = q.get("gh_jid") ?? "";
+  return /^\d+$/.test(id) ? { board: "", id } : null;
+}
+
+/** Board name from a careers page that embeds a Greenhouse board (job_board/js?for=acme, job_app?for=acme, ...). */
+function greenhouseBoardIn(html: string) {
+  return html.match(/greenhouse\.io\/embed\/job_(?:board|app)(?:\/js)?\?(?:[^"'\s]*&)?for=([\w-]+)/i)?.[1] ?? "";
+}
+
+/**
+ * Greenhouse posting from its public API. A job the API does not know is closed (Greenhouse pages then show the
+ * board, careers pages the company's generic text), so it is refused instead of generating from the wrong page.
+ * Returns null when the API could not be reached.
+ */
+async function scrapeGreenhouse(url: URL, board: string, id: string): Promise<ScrapedJob | null> {
+  let res: Response;
+  try {
+    res = await fetch(`https://boards-api.greenhouse.io/v1/boards/${encodeURIComponent(board)}/jobs/${id}`, {
+      signal: AbortSignal.timeout(15000),
+      headers: { "User-Agent": UA, Accept: "application/json" },
+    });
+  } catch {
+    return null;
+  }
+  if (res.status === 404) throw new HttpError(422, CLOSED_JOB);
+  if (!res.ok) return null;
+  const job = (await res.json().catch(() => null)) as JsonLd | null;
+  // content is escaped HTML ("&lt;p&gt;..."): unescape it, then convert to text.
+  const text = htmlToText(cheerio.load(`<div>${str(job?.content)}</div>`).root().text());
+  if (text.length < 200) throw new HttpError(422, CLOSED_JOB);
+  const title = str(job?.title);
+  const location = str(job?.location);
+  const company = str(job?.company_name);
+  return {
+    url: url.toString(),
+    title,
+    company,
+    location,
+    text: clean(`${title}${location ? `\n${location}` : ""}\n\n${text}`).slice(0, MAX_TEXT),
+    companyTrusted: !!company,
+  };
+}
+
+/** Words a real job description almost always has; plain page text needs a few of them to count as one. */
+const JOB_SIGNALS = [
+  /\bresponsibilit/i,
+  /\brequirements?\b/i,
+  /\bqualifications?\b/i,
+  /\bwhat you(?:'|’)?ll (?:do|bring|need)\b|\byou will\b/i,
+  /\b(?:\d+\+? )?years? of (?:\w+ ){0,3}experience\b|\bexperience (?:with|in)\b/i,
+  /\bskills\b/i,
+  /\babout the (?:role|job|position|team)\b|\bjob description\b|\bthe role\b/i,
+  /\b(?:full[- ]time|part[- ]time|contract|salary|compensation|benefits)\b/i,
+];
+
+function looksLikeJobDescription(text: string) {
+  return JOB_SIGNALS.filter((re) => re.test(text)).length >= 3;
+}
+
 export async function scrapeJob(rawUrl: string): Promise<ScrapedJob> {
   const url = assertPublicUrl(rawUrl.trim());
 
   // Job boards whose pages need JavaScript: read their public posting APIs.
   const fromApi = await scrapeWorkable(url);
   if (fromApi && fromApi.text.length > 200) return fromApi;
+  const gh = greenhouseRef(url);
+  if (gh?.board) {
+    const job = await scrapeGreenhouse(url, gh.board, gh.id);
+    if (job) return job;
+  }
 
   let html: string;
   try {
@@ -160,6 +238,13 @@ export async function scrapeJob(rawUrl: string): Promise<ScrapedJob> {
       422,
       `Could not fetch the job page (${e instanceof Error ? e.message : "error"}). Paste the job description manually instead.`
     );
+  }
+
+  // Careers page with an embedded Greenhouse board (?gh_jid=): the job is loaded by JavaScript, so read it from the API.
+  if (gh && !gh.board) {
+    const board = greenhouseBoardIn(html);
+    const job = board ? await scrapeGreenhouse(url, board, gh.id) : null;
+    if (job) return job;
   }
 
   const $ = cheerio.load(html);
@@ -199,6 +284,13 @@ export async function scrapeJob(rawUrl: string): Promise<ScrapedJob> {
     throw new HttpError(
       422,
       "The job page did not contain readable text (it may require JavaScript or login). Paste the job description manually instead."
+    );
+  }
+  // Text without the usual job description content (a careers or listing page, a closed job): nothing to tailor to.
+  if (!looksLikeJobDescription(text)) {
+    throw new HttpError(
+      422,
+      "No job description was found on this page (the job may be closed, or the page lists jobs instead of describing one), so nothing was generated. Paste the job description manually instead."
     );
   }
   return { url: url.toString(), title: clean(title), company: clean(site), location: "", text: text.slice(0, MAX_TEXT) };

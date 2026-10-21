@@ -16,6 +16,7 @@ export type NoticeKind =
   | "interview-report-due"
   | "interview-digest"
   | "assignment"
+  | "profile-update"
   | "account-signup"
   | "account-status"
   | "feedback-new"

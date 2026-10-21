@@ -4,6 +4,7 @@ import { Application } from "@/lib/models/Application";
 import { interviewVisibility } from "@/lib/interviews";
 import { applicationZip, baseFileName, jobDescriptionDocx, resumeDocx, resumePdf, zipFileName, zipResponse, type AppDocSource } from "@/lib/documents";
 import { oid } from "@/lib/query";
+import { applicationFolders } from "@/lib/zipLayout";
 
 export const maxDuration = 60;
 
@@ -29,7 +30,7 @@ export const GET = handler(async (req: Request, { params }: { params: Promise<{ 
   if (!app?.resume) throw new HttpError(404, "The linked application has no documents");
 
   const type = new URL(req.url).searchParams.get("type") ?? "zip";
-  if (type === "zip") return zipResponse(await applicationZip(app), zipFileName(app));
+  if (type === "zip") return zipResponse(await applicationZip(app, (await applicationFolders([app])).get(String(app._id))!), zipFileName(app));
   const t = TYPES[type as keyof typeof TYPES];
   if (!t) throw new HttpError(400, "Unknown document type");
   const data = type === "resume-pdf" ? await resumePdf(app.resume, app.resumeDesign) : type === "resume-docx" ? await resumeDocx(app.resume, app.resumeDesign) : await jobDescriptionDocx(app);

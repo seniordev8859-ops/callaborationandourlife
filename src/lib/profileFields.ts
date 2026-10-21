@@ -28,6 +28,24 @@ export const WORK_SETUPS = ["Remote", "Hybrid", "On-site"] as const;
 export const SALARY_CURRENCIES = ["USD", "CAD", "EUR", "GBP", "AUD", "INR"] as const;
 export const SALARY_PERIODS = ["year", "month", "hour"] as const;
 
+/**
+ * Starting values for a new profile's application-form fields (the usual answers; edit per profile).
+ * Existing profiles keep what they have: blank fields are not filled in.
+ */
+export const PROFILE_DEFAULTS: Record<string, string> = {
+  pronouns: "He/Him",
+  workAuthorizedUS: "Yes",
+  needsSponsorship: "No",
+  visaStatus: "US Citizen",
+  sponsorshipFreeRegions: "United States",
+  securityClearance: "None",
+  gender: "Male",
+  ethnicity: "Not Hispanic or Latino",
+  race: "", // Decline to answer
+  veteranStatus: "I am not a protected veteran",
+  disabilityStatus: "No, I do not have a disability",
+};
+
 export const PROFILE_GROUPS: FieldGroup[] = [
   {
     id: "personal",
@@ -38,7 +56,7 @@ export const PROFILE_GROUPS: FieldGroup[] = [
       { key: "middleName", label: "Middle name" },
       { key: "lastName", label: "Last name", required: true },
       { key: "preferredName", label: "Preferred name", placeholder: "e.g. Sam" },
-      { key: "pronouns", label: "Pronouns", placeholder: "e.g. she/her" },
+      { key: "pronouns", label: "Pronouns", type: "select", options: opts("He/Him", "She/Her", "They/Them"), emptyLabel: "Not set" },
       { key: "professionalTitle", label: "Professional title", placeholder: "Senior Full Stack Engineer" },
       { key: "dateOfBirth", label: "Date of birth", type: "date" },
     ],

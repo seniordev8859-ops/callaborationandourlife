@@ -54,6 +54,7 @@ const KIND_ICON: Record<string, IconType> = {
   "interview-report-due": ClipboardCheck,
   "interview-digest": CalendarClock,
   assignment: IdCard,
+  "profile-update": IdCard,
   "account-signup": UserPlus,
   "account-status": UserCheck,
   "feedback-new": MessageSquare,

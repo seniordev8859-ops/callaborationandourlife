@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useState, type MouseEvent } from "react";
+import { useEffect, useState } from "react";
 import ScreenshotUploader from "@/components/ScreenshotUploader";
 import Lightbox, { type Slide } from "@/components/Lightbox";
 import PostingLink from "@/components/PostingLink";
@@ -368,12 +368,6 @@ export default function ApplicationsPage() {
     </div>
   );
 
-  // Clicking a row opens the application, unless the click was on a control inside it.
-  const openRow = (e: MouseEvent, a: Item) => {
-    if ((e.target as HTMLElement).closest("a, button, input, label, img")) return;
-    router.push(`/applications/${a._id}`);
-  };
-
   const feeCell = (a: Item, submitted: boolean) =>
     submitted ? (
       <>
@@ -661,7 +655,7 @@ export default function ApplicationsPage() {
                     const notGenerated = a.status === "not_generated";
                     const submitted = a.status === "submitted";
                     return (
-                      <tr key={a._id} className={`cursor-pointer ${rowTint(a)}`} onClick={(e) => openRow(e, a)}>
+                      <tr key={a._id} className={rowTint(a)}>
                         <td>
                           <input type="checkbox" className="size-4 rounded align-middle" aria-label="Select application" checked={selected.has(a._id)} onChange={(e) => toggle(a._id, e.target.checked)} />
                         </td>

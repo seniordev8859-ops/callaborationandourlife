@@ -1,5 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { SESSION_COOKIE, verifySession } from "@/lib/session";
+import { canOpen, homeFor, pageFor, type DisabledPages } from "@/lib/pageAccess";
+import { getDisabledPages } from "@/lib/pageAccessStore";
 
 // Optimistic redirects only; every API route and page re-checks the user in the database.
 export async function proxy(req: NextRequest) {
@@ -11,27 +13,33 @@ export async function proxy(req: NextRequest) {
     url.searchParams.set("next", pathname);
     return NextResponse.redirect(url);
   }
-  const adminOnly = pathname.startsWith("/admin/settings") || pathname.startsWith("/admin/keys") || pathname.startsWith("/admin/notifications") || pathname.startsWith("/admin/feedback") || pathname.startsWith("/admin/logs") || pathname.startsWith("/admin/prompt-test") || pathname.startsWith("/admin/api-access") || pathname.startsWith("/admin/work-time");
+  // Pages an admin turned off for this role (Admin → Page Access); admins always have every page.
+  const disabled: DisabledPages = session.role === "admin" ? {} : await getDisabledPages().catch(() => ({}));
+  const home = () => NextResponse.redirect(new URL(homeFor(session.role, disabled), req.url));
+
+  const adminOnly = pathname.startsWith("/admin/settings") || pathname.startsWith("/admin/keys") || pathname.startsWith("/admin/notifications") || pathname.startsWith("/admin/feedback") || pathname.startsWith("/admin/logs") || pathname.startsWith("/admin/prompt-test") || pathname.startsWith("/admin/api-access") || pathname.startsWith("/admin/work-time") || pathname.startsWith("/admin/page-access");
   const staff = session.role === "admin" || session.role === "user";
   const caller = session.role === "caller";
   // Callers only use their interview pages, profiles and My Page.
   if (caller && !["/caller", "/me", "/profiles", "/notifications", "/feedback", "/help", "/interview-history"].some((p) => pathname.startsWith(p))) {
-    return NextResponse.redirect(new URL("/caller/requests", req.url));
+    return home();
   }
-  // Bidders work from Generate Resume and View Generated Resumes; other workspace pages are hidden from them.
-  if (session.role === "bidder" && (pathname === "/dashboard" || ["/overview", "/feedback"].some((p) => pathname === p || pathname.startsWith(p + "/")))) {
-    return NextResponse.redirect(new URL("/dashboard/import", req.url));
+  // Bidders work from Generate, Generate Resume and View Generated Resumes; Overview and Feedback are hidden from them.
+  if (session.role === "bidder" && ["/overview", "/feedback"].some((p) => pathname === p || pathname.startsWith(p + "/"))) {
+    return home();
   }
   // Interview History: admins, users and callers only.
   if (session.role === "bidder" && pathname.startsWith("/interview-history")) {
-    return NextResponse.redirect(new URL("/dashboard/import", req.url));
+    return home();
   }
   if (!caller && pathname.startsWith("/caller")) {
-    return NextResponse.redirect(new URL(staff ? "/admin" : "/dashboard/import", req.url));
+    return home();
   }
   if (pathname.startsWith("/admin") && (!staff || (adminOnly && session.role !== "admin"))) {
-    return NextResponse.redirect(new URL(staff ? "/admin" : "/dashboard/import", req.url));
+    return home();
   }
+  const page = pageFor(pathname);
+  if (page && !canOpen(session.role, page.key, disabled)) return home();
   return NextResponse.next();
 }
 

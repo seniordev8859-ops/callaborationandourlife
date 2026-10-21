@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Suspense, useState, type MouseEvent } from "react";
+import { Suspense, useState } from "react";
 import { useRole } from "@/components/AppShell";
 import { useConfirm, useToast } from "@/components/Alerts";
 import { ActionMenu, type ActionItem } from "@/components/ActionMenu";
@@ -263,12 +263,6 @@ function History() {
       : []),
   ];
 
-  // Clicking a row opens the application, unless the click was on a control inside it.
-  const openRow = (e: MouseEvent, a: Item) => {
-    if ((e.target as HTMLElement).closest("a, button, input, label, img")) return;
-    router.push(`/applications/${a._id}`);
-  };
-
   return (
     <div className="mx-auto max-w-[1600px]">
       <PageHeader
@@ -453,8 +447,7 @@ function History() {
                   return (
                     <tr
                       key={a._id}
-                      className={`cursor-pointer ${selected.has(a._id) ? "bg-indigo-50/70" : a.viewed ? "" : "bg-indigo-50/30"}`}
-                      onClick={(e) => openRow(e, a)}
+                      className={selected.has(a._id) ? "bg-indigo-50/70" : a.viewed ? "" : "bg-indigo-50/30"}
                     >
                       <td>
                         <input type="checkbox" className="size-4 rounded align-middle" aria-label="Select application" checked={selected.has(a._id)} onChange={(e) => toggle(a._id, e.target.checked)} />

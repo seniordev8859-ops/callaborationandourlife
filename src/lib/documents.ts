@@ -24,7 +24,7 @@ export type AppDocSource = {
 const FONT = "Calibri";
 const BLACK = "000000";
 
-function safeName(s: string, max = 80) {
+export function safeName(s: string, max = 80) {
   let name = (s || "").replace(/[^\w\- ]+/g, "").replace(/\s+/g, " ").trim();
   if (name.length > max) name = name.slice(0, max).replace(/\s+\S*$/, ""); // cut at a word boundary
   return name.replace(/\s/g, "_") || "Untitled";
@@ -1041,13 +1041,13 @@ async function atsLetterPdf(app: AppDocSource, a: AtsSpec): Promise<Uint8Array> 
 
 /* ------------------------------------------------------------------- ZIP */
 
-export async function addApplicationToZip(zip: JSZip, app: AppDocSource, folder = "", resumeOnly = false) {
-  const base = baseFileName(app);
-  const dir = folder ? zip.folder(folder)! : zip;
+/** One application's documents in `folder` (see zipLayout.ts); the folder already names the job, so the files don't repeat it. */
+export async function addApplicationToZip(zip: JSZip, app: AppDocSource, folder: string, resumeOnly = false) {
+  const dir = zip.folder(folder)!;
   if (resumeOnly) {
     const [rDocx, rPdf] = await Promise.all([resumeDocx(app.resume, app.resumeDesign), resumePdf(app.resume, app.resumeDesign)]);
-    dir.file(`${base}_Resume.docx`, rDocx);
-    dir.file(`${base}_Resume.pdf`, rPdf);
+    dir.file("Resume.docx", rDocx);
+    dir.file("Resume.pdf", rPdf);
     return;
   }
   const [rDocx, rPdf, cDocx, cPdf, jdDocx] = await Promise.all([
@@ -1057,16 +1057,16 @@ export async function addApplicationToZip(zip: JSZip, app: AppDocSource, folder 
     coverLetterPdf(app),
     jobDescriptionDocx(app),
   ]);
-  dir.file(`${base}_Resume.docx`, rDocx);
-  dir.file(`${base}_Resume.pdf`, rPdf);
-  dir.file(`${base}_Cover_Letter.docx`, cDocx);
-  dir.file(`${base}_Cover_Letter.pdf`, cPdf);
-  dir.file(`${base}_Job_Description.docx`, jdDocx);
+  dir.file("Resume.docx", rDocx);
+  dir.file("Resume.pdf", rPdf);
+  dir.file("Cover_Letter.docx", cDocx);
+  dir.file("Cover_Letter.pdf", cPdf);
+  dir.file("Job_Description.docx", jdDocx);
 }
 
-export async function applicationZip(app: AppDocSource) {
+export async function applicationZip(app: AppDocSource, folder: string) {
   const zip = new JSZip();
-  await addApplicationToZip(zip, app);
+  await addApplicationToZip(zip, app, folder);
   return zip.generateAsync({ type: "uint8array", compression: "DEFLATE" });
 }
 

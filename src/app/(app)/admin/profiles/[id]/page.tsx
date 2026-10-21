@@ -10,7 +10,7 @@ import ModelInput from "@/components/ModelInput";
 import DesignPicker from "@/components/DesignPicker";
 import { ArrowDown, ArrowUp, Plus, Trash2 } from "lucide-react";
 import { Alert, api, PageHeader, Spinner, PageSkeleton, useAsync } from "@/components/ui";
-import { PROFILE_GROUP_TEXT_KEYS, PROFILE_GROUPS, SALARY_CURRENCIES, SALARY_PERIODS, selectOptions, type FieldDef } from "@/lib/profileFields";
+import { PROFILE_DEFAULTS, PROFILE_GROUP_TEXT_KEYS, PROFILE_GROUPS, SALARY_CURRENCIES, SALARY_PERIODS, selectOptions, type FieldDef } from "@/lib/profileFields";
 import { DEFAULT_DESIGN } from "@/lib/designs";
 
 type Exp = { company: string; title: string; location: string; startDate: string; endDate: string; current: boolean; description: string };
@@ -46,6 +46,7 @@ type UserOpt = { _id: string; name: string; email: string };
 
 const INFO_KEYS = ["fullName", "location", "salaryCurrency", "salaryPeriod", ...PROFILE_GROUP_TEXT_KEYS];
 
+/** Base for both new and loaded profiles: no application-form defaults here, so blank fields of existing profiles stay blank. */
 const EMPTY: Form = {
   label: "",
   info: { salaryCurrency: "USD", salaryPeriod: "year" },
@@ -67,6 +68,8 @@ const EMPTY: Form = {
   resumeDesign: DEFAULT_DESIGN,
   coverLetterDesign: DEFAULT_DESIGN,
 };
+/** A new profile starts with the usual application-form answers filled in (lib/profileFields.ts PROFILE_DEFAULTS). */
+const NEW_PROFILE: Form = { ...EMPTY, info: { ...EMPTY.info, ...PROFILE_DEFAULTS } };
 const NEW_EXP: Exp = { company: "", title: "", location: "", startDate: "", endDate: "", current: false, description: "" };
 const NEW_EDU: Edu = { university: "", degree: "", field: "", startDate: "", endDate: "" };
 
@@ -121,7 +124,7 @@ export default function ProfileEditor({ params }: { params: Promise<{ id: string
   const router = useRouter();
   const toast = useToast();
   const confirm = useConfirm();
-  const [form, setForm] = useState<Form>(EMPTY);
+  const [form, setForm] = useState<Form>(isNew ? NEW_PROFILE : EMPTY);
   const [savedManager, setSavedManager] = useState("");
   const isAdmin = useRole() === "admin";
   const keys = useAsync(

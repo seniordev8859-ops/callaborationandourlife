@@ -1,8 +1,9 @@
 import JSZip from "jszip";
 import { handler, HttpError, profileScope, requireUser } from "@/lib/auth";
 import { Application } from "@/lib/models/Application";
-import { addApplicationToZip, applicationLabel, baseFileName, coverLetterPdf, resumePdf, zipResponse, type AppDocSource } from "@/lib/documents";
+import { addApplicationToZip, baseFileName, coverLetterPdf, resumePdf, zipResponse, type AppDocSource } from "@/lib/documents";
 import { oid } from "@/lib/query";
+import { applicationFolders } from "@/lib/zipLayout";
 
 export const maxDuration = 60;
 
@@ -10,8 +11,8 @@ const MAX_SELECTED = 100;
 
 /**
  * POST { ids: string[], content?: "all" | "resume" | "resume-pdf" | "cover-pdf" } → one ZIP.
- * "all" (default): a folder per application with resume PDF + DOCX, cover letter PDF + DOCX and job description DOCX;
- * "resume": resumes only (PDF + DOCX, per folder); "resume-pdf" / "cover-pdf": just those PDFs, side by side with no folders.
+ * "all" (default): a folder per application, [Date]/[Profile]/[Index]_[Job Title] (zipLayout.ts), with resume PDF + DOCX,
+ * cover letter PDF + DOCX and job description DOCX; "resume": resumes only (PDF + DOCX, same folders); "resume-pdf" / "cover-pdf": just those PDFs, side by side with no folders.
  * Bidders get their own applications; users (managers) those of their profiles; admins any.
  */
 export const POST = handler(async (req: Request) => {
@@ -50,11 +51,9 @@ export const POST = handler(async (req: Request) => {
       if (resume) zip.file(`${base}_Resume.pdf`, resume);
       if (cover) zip.file(`${base}_Cover_Letter.pdf`, cover);
     });
-  } else for (const app of apps) {
-    let folder = applicationLabel(app);
-    for (let i = 2; used.has(folder); i++) folder = `${applicationLabel(app)} (${i})`;
-    used.add(folder);
-    await addApplicationToZip(zip, app, folder, resumeOnly);
+  } else {
+    const folders = await applicationFolders(apps);
+    for (const app of apps) await addApplicationToZip(zip, app, folders.get(String(app._id))!, resumeOnly);
   }
   const data = await zip.generateAsync({ type: "uint8array", compression: "DEFLATE" });
   const stamp = new Date().toISOString().slice(0, 10);

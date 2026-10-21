@@ -26,6 +26,8 @@ const SettingsSchema = new Schema(
     companyCooldownDays: { type: Number, default: 30, min: 0 },
     /** Hours a caller has to schedule an interview request before the responsible users are notified. */
     interviewScheduleHours: { type: Number, default: 3, min: 0.25 },
+    /** Pages turned off per role ({ user: [keys], bidder: [...], caller: [...] }); see lib/pageAccess.ts. */
+    pageAccess: { type: Schema.Types.Mixed, default: () => ({}) },
     /** Lock for the interview reminder sweep (see lib/interviews.ts runInterviewSweep). */
     interviewSweepAt: { type: Date, default: null },
   },

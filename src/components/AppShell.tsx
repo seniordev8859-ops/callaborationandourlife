@@ -32,6 +32,7 @@ import {
   Plug,
   ScrollText,
   Settings,
+  ShieldCheck,
   Sparkles,
   SunMoon,
   SquareUser,
@@ -48,8 +49,10 @@ import { NotificationBell, NotificationProvider } from "./Notifications";
 import { OnlineMenu, PresenceProvider } from "./Presence";
 import { AlertsProvider } from "./Alerts";
 import UpcomingInterviews from "./UpcomingInterviews";
+import UpdatePrompt from "./UpdatePrompt";
 import { HelpButton } from "./HelpGuide";
 import type { IconType } from "./ui";
+import { pageFor } from "@/lib/pageAccess";
 
 const RoleContext = createContext<string>("bidder");
 /** Current account's role ("admin" | "user" | "bidder" | "caller") for role-aware client pages. */
@@ -72,7 +75,7 @@ const USER_NAV: NavItem[] = [
 ];
 
 /** Pages bidders don't use (hidden from their menu; proxy.ts redirects them to Generate Resume). */
-export const BIDDER_HIDDEN = ["/overview", "/dashboard", "/feedback"];
+export const BIDDER_HIDDEN = ["/overview", "/feedback"];
 /** Shown to a bidder only while an admin allows it (Users & Bidders → "Interview Requests page"). */
 const BIDDER_INTERVIEWS = "/interviews";
 /** Bidders see "My Profiles" under this name. */
@@ -98,6 +101,7 @@ const ADMIN_SYSTEM: NavItem[] = [
   { href: "/admin/keys", label: "API Keys", icon: KeyRound, adminOnly: true },
   { href: "/admin/api-access", label: "API Access", icon: Plug, adminOnly: true },
   { href: "/admin/prompt-test", label: "Test Generate Resume", icon: FlaskConical, adminOnly: true },
+  { href: "/admin/page-access", label: "Page Access", icon: ShieldCheck, adminOnly: true },
   { href: "/admin/settings", label: "Settings", icon: Settings, adminOnly: true },
 ];
 
@@ -112,7 +116,15 @@ const CALLER_NAV: NavItem[] = [
   { href: "/me", label: "My Page", icon: CircleUser },
 ];
 
-function navFor(role: string, interviewAccess: boolean): NavSection[] {
+/** The role's menu without the pages an admin turned off for it (Admin → Page Access). */
+function navFor(role: string, interviewAccess: boolean, disabledPages: string[]): NavSection[] {
+  const off = (i: NavItem) => disabledPages.includes(pageFor(i.href)?.key ?? "");
+  return menuFor(role, interviewAccess)
+    .map((s) => ({ ...s, items: s.items.filter((i) => !off(i)) }))
+    .filter((s) => s.items.length);
+}
+
+function menuFor(role: string, interviewAccess: boolean): NavSection[] {
   if (role === "caller") return [{ title: "Menu", items: CALLER_NAV }];
   if (role === "bidder")
     return [
@@ -142,6 +154,7 @@ export default function AppShell({
   avatar = "",
   mustChangePassword = false,
   interviewAccess = true,
+  disabledPages = [],
   timezone = DEFAULT_TZ,
   interviewTimezone = DEFAULT_TZ,
   children,
@@ -152,6 +165,8 @@ export default function AppShell({
   avatar?: string;
   mustChangePassword?: boolean;
   interviewAccess?: boolean;
+  /** Page keys an admin turned off for this role (lib/pageAccess.ts); hidden from the menu. */
+  disabledPages?: string[];
   /** The account's own time zone (callers: theirs; others: the default GMT-04:00). */
   timezone?: string;
   /** Zone the interview pages open in (the account's own zone from My Page). */
@@ -218,7 +233,7 @@ export default function AppShell({
     return () => window.removeEventListener("keydown", onKey);
   }, [toggleSidebar]);
 
-  const sections = useMemo(() => navFor(role, interviewAccess), [role, interviewAccess]);
+  const sections = useMemo(() => navFor(role, interviewAccess, disabledPages), [role, interviewAccess, disabledPages]);
   const isActive = (item: NavItem) => (item.exact ? pathname === item.href : pathname === item.href || pathname.startsWith(item.href + "/"));
 
   // Breadcrumb: the section and the best-matching menu item; deeper pages add "Details".
@@ -357,6 +372,7 @@ export default function AppShell({
                 </Link>
               </div>
             )}
+            <UpdatePrompt />
             <RoleContext.Provider value={role}>
               <div key={pathname} className="animate-page-in">
                 {children}

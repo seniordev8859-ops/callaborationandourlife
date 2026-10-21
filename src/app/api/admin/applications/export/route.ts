@@ -4,7 +4,8 @@ import { Application } from "@/lib/models/Application";
 import "@/lib/models/Profile";
 import "@/lib/models/User";
 import { adminApplicationFilter } from "@/lib/adminFilter";
-import { addApplicationToZip, applicationLabel, zipResponse, type AppDocSource } from "@/lib/documents";
+import { addApplicationToZip, zipResponse, type AppDocSource } from "@/lib/documents";
+import { applicationFolders } from "@/lib/zipLayout";
 
 export const maxDuration = 60;
 
@@ -25,7 +26,7 @@ function csvCell(v: unknown) {
   return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
 }
 
-/** Bulk ZIP download of generated documents, filtered by user / profile / date range. */
+/** Bulk ZIP download of generated documents ([Date]/[Profile]/[Index]_[Job Title]/… plus summary.csv), filtered by user / profile / date range. */
 export const GET = handler(async (req: Request) => {
   const staff = await requireStaff();
   const sp = new URL(req.url).searchParams;
@@ -47,15 +48,11 @@ export const GET = handler(async (req: Request) => {
 
   const zip = new JSZip();
   const csv = [["Date", "User", "Email", "Profile", "Company", "Job Title", "Location", "Status", "Submitted At", "Fee", "Paid", "Job URL", "Screenshots"]];
-  const used = new Set<string>();
+  const folders = await applicationFolders(apps);
 
   for (const app of apps) {
     const day = new Date(app.createdAt!).toISOString().slice(0, 10);
-    const userDir = (app.user?.name || "Unknown user").replace(/[^\w\- ]+/g, "").trim() || "user";
-    let folder = `${userDir}/${applicationLabel(app)}`;
-    for (let i = 2; used.has(folder); i++) folder = `${userDir}/${applicationLabel(app)} (${i})`;
-    used.add(folder);
-    await addApplicationToZip(zip, app, folder, resumeOnly);
+    await addApplicationToZip(zip, app, folders.get(String(app._id))!, resumeOnly);
     csv.push([
       day,
       app.user?.name ?? "",

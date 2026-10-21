@@ -96,6 +96,11 @@ const ProfileSchema = new Schema(
     resumeDesign: { type: String, enum: DESIGN_IDS, default: DEFAULT_DESIGN },
     coverLetterDesign: { type: String, enum: DESIGN_IDS, default: DEFAULT_DESIGN },
     active: { type: Boolean, default: true },
+    /** Last edit that people using the profile are told about (lib/profileNotify.ts): when, by whom, which sections. */
+    contentUpdatedAt: { type: Date, default: null },
+    contentUpdatedBy: { type: Types.ObjectId, ref: "User", default: null },
+    contentUpdatedByName: { type: String, default: "" },
+    contentChanges: { type: [String], default: [] },
   },
   { timestamps: true }
 );
