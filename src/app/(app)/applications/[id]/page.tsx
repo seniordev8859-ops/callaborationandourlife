@@ -1,7 +1,7 @@
 "use client";
 
 import { use, useEffect, useState } from "react";
-import { Briefcase, CircleCheck, Clock, Download, ExternalLink, FileText, Mail, Pencil, RefreshCw, Send, Sparkles, Trash2, TriangleAlert, Undo2 } from "lucide-react";
+import { Briefcase, CircleCheck, Clock, Download, ExternalLink, FileText, Mail, MessagesSquare, Pencil, RefreshCw, Send, Sparkles, Trash2, TriangleAlert, Undo2 } from "lucide-react";
 import ScreenshotUploader from "@/components/ScreenshotUploader";
 import Lightbox, { type Slide } from "@/components/Lightbox";
 import PostingLink from "@/components/PostingLink";
@@ -10,6 +10,7 @@ import type { ResumeContent } from "@/lib/generate";
 import ResumePreview from "@/components/ResumePreview";
 import MatchScore from "@/components/MatchScore";
 import JobInfoDialog from "@/components/JobInfoDialog";
+import InterviewChat from "@/components/InterviewChat";
 import { useRole } from "@/components/AppShell";
 import { useConfirm, useToast } from "@/components/Alerts";
 import { isUnknownCompany, isUntitledRole, missingJobInfo } from "@/lib/jobInfo";
@@ -38,7 +39,7 @@ type Detail = {
   deletedByUser?: boolean;
 };
 
-const TABS = ["Resume", "Cover letter", "Job description"] as const;
+const TABS = ["Resume", "Cover letter", "Job description", "Chat"] as const;
 
 export default function ApplicationDetail({
   params,
@@ -176,7 +177,15 @@ export default function ApplicationDetail({
             <div className="tabs gap-4 px-4 sm:gap-5 sm:px-5" role="tablist" aria-label="Documents">
               {TABS.map((t) => (
                 <button key={t} role="tab" aria-selected={tab === t} onClick={() => setTab(t)}>
-                  {t === "Resume" ? <FileText className="size-4" /> : t === "Cover letter" ? <Mail className="size-4" /> : <Briefcase className="size-4" />}
+                  {t === "Resume" ? (
+                    <FileText className="size-4" />
+                  ) : t === "Cover letter" ? (
+                    <Mail className="size-4" />
+                  ) : t === "Chat" ? (
+                    <MessagesSquare className="size-4" />
+                  ) : (
+                    <Briefcase className="size-4" />
+                  )}
                   {t}
                 </button>
               ))}
@@ -207,6 +216,8 @@ export default function ApplicationDetail({
                 <pre className="font-sans text-sm leading-relaxed whitespace-pre-wrap text-slate-700">{app.jobDescription}</pre>
               </div>
             )}
+            {/* Unmounted when another tab is chosen, which clears the chat. */}
+            {tab === "Chat" && <InterviewChat appId={app._id} />}
           </div>
         </div>
 

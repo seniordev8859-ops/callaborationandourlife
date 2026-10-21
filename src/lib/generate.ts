@@ -137,7 +137,7 @@ const HUMAN_FIXES: [RegExp, string][] = [
   [/\bI am writing to express my interest in\b/gi, "I'm applying for"],
 ];
 const keepCase = (from: string, to: string) => (to && /^[A-Z]/.test(from) ? to[0].toUpperCase() + to.slice(1) : to);
-const humanize = (s: string) =>
+export const humanize = (s: string) =>
   HUMAN_FIXES.reduce((t, [re, rep]) => t.replace(re, (m: string, g1?: unknown) => keepCase(m, rep.replace("$1", typeof g1 === "string" ? g1 : ""))), s);
 const ICONS = /[☀-➿\u{1F300}-\u{1FAFF}✅✔✓➤▶►⭐]/gu;
 
