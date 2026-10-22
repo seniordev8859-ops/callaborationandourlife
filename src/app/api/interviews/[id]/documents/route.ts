@@ -2,9 +2,9 @@ import { canRequestInterviews, handler, HttpError, requireUser } from "@/lib/aut
 import { InterviewRequest } from "@/lib/models/InterviewRequest";
 import { Application } from "@/lib/models/Application";
 import { interviewVisibility } from "@/lib/interviews";
-import { applicationZip, baseFileName, jobDescriptionDocx, resumeDocx, resumePdf, zipFileName, zipResponse, type AppDocSource } from "@/lib/documents";
+import { applicationZip, jobDescriptionDocx, resumeDocx, resumePdf, zipFileName, zipResponse, type AppDocSource } from "@/lib/documents";
 import { oid } from "@/lib/query";
-import { applicationFolders } from "@/lib/zipLayout";
+import { applicationFileBases, applicationFolders } from "@/lib/zipLayout";
 
 export const maxDuration = 60;
 
@@ -34,7 +34,7 @@ export const GET = handler(async (req: Request, { params }: { params: Promise<{ 
   const t = TYPES[type as keyof typeof TYPES];
   if (!t) throw new HttpError(400, "Unknown document type");
   const data = type === "resume-pdf" ? await resumePdf(app.resume, app.resumeDesign) : type === "resume-docx" ? await resumeDocx(app.resume, app.resumeDesign) : await jobDescriptionDocx(app);
-  const name = `${baseFileName(app)}_${t.suffix}.${t.ext}`;
+  const name = `${(await applicationFileBases([app])).get(String(app._id))}_${t.suffix}.${t.ext}`;
   return new Response(data as unknown as BodyInit, {
     headers: {
       "Content-Type": t.mime,

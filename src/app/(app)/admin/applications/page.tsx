@@ -11,7 +11,7 @@ import PostingLink from "@/components/PostingLink";
 import ReadDot from "@/components/ReadDot";
 import { useColumns } from "@/components/ColumnPicker";
 import { ArrowRight, Check, CircleCheck, CircleDollarSign, Clock, Download, ExternalLink, Eye, FileArchive, FileDown, FileText, Inbox, Search, Send, Trash2, Undo2, Wallet, X } from "lucide-react";
-import { Alert, api, Badge, notGeneratedReason, DateRangeFilter, downloadFile, EmptyState, fmtStamp, money, PageHeader, Pagination, rangeParams, Spinner, TableSkeleton, Stat, useAsync, usePageSize, limitParam } from "@/components/ui";
+import { Alert, api, Badge, notGeneratedReason, DateRangeFilter, downloadFile, EmptyState, fmtStamp, money, PageHeader, Pagination, rangeParams, selectOnRowClick, Spinner, TableSkeleton, Stat, useAsync, usePageSize, limitParam } from "@/components/ui";
 
 type Person = { _id: string; name: string; email: string };
 type Item = {
@@ -240,11 +240,8 @@ function History() {
     if (ids.length > 100) return toast.warning("Too many selected", "Select 100 applications or fewer per download, or use the filtered download buttons above.");
     setBulk(content);
     try {
-      // A single PDF comes down as the PDF itself rather than a ZIP with one file in it.
-      if ((content === "resume-pdf" || content === "cover-pdf") && ids.length === 1)
-        await downloadFile(`/api/applications/${ids[0]}/download?format=${content}`, content === "resume-pdf" ? "resume.pdf" : "cover-letter.pdf");
-      else
-        await downloadFile("/api/applications/bulk-download", { all: "applications.zip", resume: "resumes.zip", "resume-pdf": "resume-pdfs.zip", "cover-pdf": "cover-letter-pdfs.zip" }[content], { ids, content });
+      // Always a ZIP, even for one PDF, so it keeps the [Date]/[Profile]/[Company]/[Job Title]/ folders.
+      await downloadFile("/api/applications/bulk-download", { all: "applications.zip", resume: "resumes.zip", "resume-pdf": "resume-pdfs.zip", "cover-pdf": "cover-letter-pdfs.zip" }[content], { ids, content });
     } catch (e) {
       toast.error("Download failed", (e as Error).message);
     } finally {
@@ -447,7 +444,8 @@ function History() {
                   return (
                     <tr
                       key={a._id}
-                      className={selected.has(a._id) ? "bg-indigo-50/70" : a.viewed ? "" : "bg-indigo-50/30"}
+                      className={`cursor-pointer ${selected.has(a._id) ? "bg-indigo-50/70" : a.viewed ? "" : "bg-indigo-50/30"}`}
+                      onClick={selectOnRowClick(() => toggle(a._id, !selected.has(a._id)))}
                     >
                       <td>
                         <input type="checkbox" className="size-4 rounded align-middle" aria-label="Select application" checked={selected.has(a._id)} onChange={(e) => toggle(a._id, e.target.checked)} />

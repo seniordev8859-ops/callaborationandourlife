@@ -1,10 +1,10 @@
 import { canManageProfile, handler, HttpError, requireUser } from "@/lib/auth";
 import { Application } from "@/lib/models/Application";
-import { applicationZip, baseFileName, coverLetterPdf, resumePdf, zipFileName, zipResponse, type AppDocSource } from "@/lib/documents";
+import { applicationZip, coverLetterPdf, resumePdf, zipFileName, zipResponse, type AppDocSource } from "@/lib/documents";
 import { oid } from "@/lib/query";
-import { applicationFolders } from "@/lib/zipLayout";
+import { applicationFileBases, applicationFolders } from "@/lib/zipLayout";
 
-/** ZIP of all documents ([Date]/[Profile]/[Index]_[Job Title]_[Company]/…, see zipLayout.ts), or `?format=resume-pdf` / `?format=cover-pdf` for just the resume or cover letter PDF. */
+/** ZIP of all documents ([Date]/[Profile]/[Company]/[Job Title]/…, see zipLayout.ts), or `?format=resume-pdf` / `?format=cover-pdf` for just the resume or cover letter PDF, named [Date]_[Profile]_[Company]_[Job Title]_Resume.pdf. */
 export const GET = handler(async (req: Request, { params }: { params: Promise<{ id: string }> }) => {
   const user = await requireUser();
   const app = await Application.findById(oid((await params).id)).lean<
@@ -17,7 +17,8 @@ export const GET = handler(async (req: Request, { params }: { params: Promise<{ 
 
   const format = new URL(req.url).searchParams.get("format");
   if (format === "resume-pdf" || format === "cover-pdf") {
-    const name = `${baseFileName(app)}_${format === "resume-pdf" ? "Resume" : "Cover_Letter"}.pdf`;
+    const base = (await applicationFileBases([app])).get(String(app._id))!;
+    const name = `${base}_${format === "resume-pdf" ? "Resume" : "Cover_Letter"}.pdf`;
     const pdf = format === "resume-pdf" ? await resumePdf(app.resume, app.resumeDesign) : await coverLetterPdf(app);
     return new Response(pdf as unknown as BodyInit, {
       headers: {

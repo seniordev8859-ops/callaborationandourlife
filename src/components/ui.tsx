@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState, type ComponentType, type ReactNode } from "react";
+import { useEffect, useState, type ComponentType, type MouseEvent, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { AlertTriangle, ArrowLeft, CheckCircle2, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Info, X } from "lucide-react";
 import { fromTzInput, fromWallTime, tzParts } from "@/lib/viewerTz";
@@ -43,6 +43,20 @@ export async function downloadFile(url: string, fallbackName: string, json?: unk
   a.download = name;
   a.click();
   setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+}
+
+/**
+ * Row onClick that toggles the row's selection, except on links, buttons, inputs and other controls inside it,
+ * clicks from portals (menus, dialogs) and when the click ends a text selection.
+ */
+export function selectOnRowClick(onToggle: () => void) {
+  return (e: MouseEvent<HTMLElement>) => {
+    const target = e.target as HTMLElement;
+    if (!e.currentTarget.contains(target)) return;
+    if (target.closest("a, button, input, select, textarea, label, summary, [role='button'], [role='menuitem'], [contenteditable='true']")) return;
+    if (window.getSelection()?.toString()) return;
+    onToggle();
+  };
 }
 
 /* ------------------------------------------------------------- formatting */

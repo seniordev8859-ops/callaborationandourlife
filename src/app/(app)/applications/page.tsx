@@ -14,7 +14,7 @@ import { useConfirm, useToast } from "@/components/Alerts";
 import { ActionMenu, type ActionItem } from "@/components/ActionMenu";
 import { isUnknownCompany, isUntitledRole, missingJobInfo } from "@/lib/jobInfo";
 import { ArrowRight, CircleDollarSign, Clock, Download, ExternalLink, Eye, FileArchive, FileDown, FileText, Inbox, MapPin, Pencil, Plus, Search, Send, Trash2, X } from "lucide-react";
-import { Alert, api, Badge, notGeneratedReason, DateRangeFilter, downloadFile, EmptyState, fmtStamp, money, PageHeader, Pagination, rangeParams, Section, Spinner, TableSkeleton, Stat, useAsync, usePageSize, limitParam, useClientPaging } from "@/components/ui";
+import { Alert, api, Badge, notGeneratedReason, DateRangeFilter, downloadFile, EmptyState, fmtStamp, money, PageHeader, Pagination, rangeParams, Section, selectOnRowClick, Spinner, TableSkeleton, Stat, useAsync, usePageSize, limitParam, useClientPaging } from "@/components/ui";
 
 type Item = {
   _id: string;
@@ -134,11 +134,8 @@ export default function ApplicationsPage() {
     if (ids.length > MAX_BULK) return toast.warning("Too many selected", `Select ${MAX_BULK} applications or fewer per download.`);
     setBulk(content);
     try {
-      // A single PDF comes down as the PDF itself rather than a ZIP with one file in it.
-      if ((content === "resume-pdf" || content === "cover-pdf") && ids.length === 1)
-        await downloadFile(`/api/applications/${ids[0]}/download?format=${content}`, content === "resume-pdf" ? "resume.pdf" : "cover-letter.pdf");
-      else
-        await downloadFile("/api/applications/bulk-download", { all: "applications.zip", resume: "resumes.zip", "resume-pdf": "resume-pdfs.zip", "cover-pdf": "cover-letter-pdfs.zip" }[content], { ids, content });
+      // Always a ZIP, even for one PDF, so it keeps the [Date]/[Profile]/[Company]/[Job Title]/ folders.
+      await downloadFile("/api/applications/bulk-download", { all: "applications.zip", resume: "resumes.zip", "resume-pdf": "resume-pdfs.zip", "cover-pdf": "cover-letter-pdfs.zip" }[content], { ids, content });
     } catch (e) {
       toast.error("Download failed", (e as Error).message);
     } finally {
@@ -568,7 +565,7 @@ export default function ApplicationsPage() {
                   const notGenerated = a.status === "not_generated";
                   const submitted = a.status === "submitted";
                   return (
-                    <li key={a._id} className={`px-4 py-3.5 ${rowTint(a)}`}>
+                    <li key={a._id} className={`cursor-pointer px-4 py-3.5 ${rowTint(a)}`} onClick={selectOnRowClick(() => toggle(a._id, !selected.has(a._id)))}>
                       <div className="flex items-start gap-3">
                         <input
                           type="checkbox"
@@ -655,7 +652,7 @@ export default function ApplicationsPage() {
                     const notGenerated = a.status === "not_generated";
                     const submitted = a.status === "submitted";
                     return (
-                      <tr key={a._id} className={rowTint(a)}>
+                      <tr key={a._id} className={`cursor-pointer ${rowTint(a)}`} onClick={selectOnRowClick(() => toggle(a._id, !selected.has(a._id)))}>
                         <td>
                           <input type="checkbox" className="size-4 rounded align-middle" aria-label="Select application" checked={selected.has(a._id)} onChange={(e) => toggle(a._id, e.target.checked)} />
                         </td>

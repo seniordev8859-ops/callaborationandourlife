@@ -1,7 +1,7 @@
 import JSZip from "jszip";
 import { handler, HttpError, profileScope, requireUser } from "@/lib/auth";
 import { Application } from "@/lib/models/Application";
-import { addApplicationToZip, baseFileName, coverLetterPdf, resumePdf, zipResponse, type AppDocSource } from "@/lib/documents";
+import { addApplicationToZip, coverLetterPdf, resumePdf, zipResponse, type AppDocSource } from "@/lib/documents";
 import { oid } from "@/lib/query";
 import { applicationFolders } from "@/lib/zipLayout";
 
@@ -11,8 +11,9 @@ const MAX_SELECTED = 100;
 
 /**
  * POST { ids: string[], content?: "all" | "resume" | "resume-pdf" | "cover-pdf" } → one ZIP.
- * "all" (default): a folder per application, [Date]/[Profile]/[Index]_[Job Title]_[Company] (zipLayout.ts), with resume PDF + DOCX,
- * cover letter PDF + DOCX and job description DOCX; "resume": resumes only (PDF + DOCX, same folders); "resume-pdf" / "cover-pdf": just those PDFs, side by side with no folders.
+ * "all" (default): a folder per application, [Date]/[Profile]/[Company]/[Job Title] (zipLayout.ts), with resume PDF + DOCX,
+ * cover letter PDF + DOCX and job description DOCX; "resume": resumes only (PDF + DOCX, same folders); "resume-pdf" / "cover-pdf": just those PDFs,
+ * in the same folders.
  * Bidders get their own applications; users (managers) those of their profiles; admins any.
  */
 export const POST = handler(async (req: Request) => {
@@ -36,20 +37,18 @@ export const POST = handler(async (req: Request) => {
   if (!apps.length) throw new HttpError(404, "None of the selected applications have generated documents");
 
   const zip = new JSZip();
-  const used = new Set<string>();
   if (content === "resume-pdf" || content === "cover-pdf") {
     const withResume = content !== "cover-pdf";
     const withCover = content !== "resume-pdf";
-    const pdfs = await Promise.all(
-      apps.map((app) => Promise.all([withResume ? resumePdf(app.resume, app.resumeDesign) : null, withCover ? coverLetterPdf(app) : null]))
-    );
+    const [folders, pdfs] = await Promise.all([
+      applicationFolders(apps),
+      Promise.all(apps.map((app) => Promise.all([withResume ? resumePdf(app.resume, app.resumeDesign) : null, withCover ? coverLetterPdf(app) : null]))),
+    ]);
     apps.forEach((app, i) => {
-      let base = baseFileName(app);
-      for (let n = 2; used.has(base); n++) base = `${baseFileName(app)} (${n})`;
-      used.add(base);
+      const folder = folders.get(String(app._id))!;
       const [resume, cover] = pdfs[i];
-      if (resume) zip.file(`${base}_Resume.pdf`, resume);
-      if (cover) zip.file(`${base}_Cover_Letter.pdf`, cover);
+      if (resume) zip.file(`${folder}/Resume.pdf`, resume);
+      if (cover) zip.file(`${folder}/Cover_Letter.pdf`, cover);
     });
   } else {
     const folders = await applicationFolders(apps);
