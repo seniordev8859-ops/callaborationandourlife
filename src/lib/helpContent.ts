@@ -24,7 +24,7 @@ export const ROLE_INTRO: Record<HelpRole, string> = {
   bidder: "You generate tailored resumes for full-time roles from job URLs, then submit each application and log the proof.",
   caller: "You schedule and conduct interviews for the profiles assigned to you, then report each result.",
   user: "You manage the candidate profiles assigned to you: their bidders, callers, applications and interviews.",
-  admin: "You run TailorBid: accounts, profiles, assignments, applications and fees, interviews, API keys, settings, notifications and the activity log.",
+  admin: "You run TailorBid: accounts, page access, profiles, assignments, applications and fees, interviews, API keys, settings, notifications and the activity log.",
 };
 
 /** The first things to do, per role. */
@@ -93,13 +93,14 @@ export const HELP_PAGES: HelpPage[] = [
     steps: [
       { title: "Choose the profile", detail: "Pick the candidate profile to apply with. The remaining monthly quota is shown under it." },
       { title: "Paste the job URL", detail: "Paste the link to the job posting (Greenhouse, Lever, Workday, company sites…) and click Generate resume, cover letter & JD." },
-      { title: "If the page can't be read", detail: "Some sites block reading. The attempt is saved as Not-generated and its page opens: paste the job description there. Or tick Paste the job description manually before you click Generate (at least 100 characters)." },
+      { title: "If the page can't be read", detail: "Some sites block reading, and some links have no job description (the job is closed, or the page lists jobs instead of describing one). Nothing is generated: the attempt is saved as Not-generated with the reason, and its page opens so you can paste the job description there. Or tick Paste the job description manually before you click Generate (at least 100 characters)." },
       { title: "Download the ZIP", detail: "When it's ready you're taken to the application. Download the ZIP: resume (PDF + DOCX), cover letter (PDF + DOCX) and job description (DOCX)." },
     ],
     tips: [
       "The same company can't be applied to again with the same profile within the cooldown (30 days by default). A blocked bid is refused on screen with the date it becomes allowed.",
       "Already generated this job with this profile? You're told so: click View existing, or Generate anyway to make a new one.",
       "Generating is free; the fee is charged only when you submit.",
+      "Inside the ZIP, each application has its own folder: Date / Profile name / number_Job title (for example 2026-10-21/Jane_Doe/01_Senior_Software_Engineer), holding Resume.pdf, Resume.docx, Cover_Letter.pdf, Cover_Letter.docx and Job_Description.docx. The number is the application's order among that profile's resumes generated that day.",
     ],
   },
   {
@@ -113,7 +114,7 @@ export const HELP_PAGES: HelpPage[] = [
       { title: "Choose the profile", detail: "Every resume in the batch is tailored with the selected profile. The remaining monthly quota is shown under it." },
       { title: "Paste the job URLs", detail: "Paste the links to the job postings in the Job URLs box, one per line. The box shows how many URLs it found." },
       { title: "Click Generate resumes", detail: "The button shows how many URLs will run. The links are loaded and generation starts right away, two at a time. Keep the page open; you can pause, resume or cancel." },
-      { title: "Check each row", detail: "Rows end as generated, not-generated (job page unreadable or AI step failed), already generated, blocked (same company within the cooldown), failed or not run (quota reached or cancelled)." },
+      { title: "Check each row", detail: "Rows end as generated, not-generated (job page unreadable, no job description on it or the job is closed, or the AI step failed), already generated, blocked (same company within the cooldown), failed or not run (quota reached or cancelled)." },
       { title: "Retry or fix", detail: "Click Retry (failed / not generated / not run) to run those rows again, or open a not-generated one to paste its job description. Clear list empties the table." },
       { title: "Submit them later", detail: "Generated resumes appear in View Generated Resumes, ready to download, apply and submit." },
     ],
@@ -135,7 +136,7 @@ export const HELP_PAGES: HelpPage[] = [
       { title: "Customize columns", detail: "Use Columns to show or hide table columns; your choice is remembered." },
       { title: "Check payment status", detail: "The Fee column shows each submitted application's fee and whether it is Paid or Not paid." },
     ],
-    tips: ["Paid applications can't be deleted or un-submitted.", "Bidders can't delete applications; ask an admin if one should be removed.", "Click a company or role to open the application's full details."],
+    tips: ["Paid applications can't be deleted or un-submitted.", "Bidders can't delete applications; ask an admin if one should be removed.", "Click a company or role to open the application's full details.", "Inside the ZIP, each application has its own folder: Date / Profile name / number_Job title (for example 2026-10-21/Jane_Doe/01_Senior_Software_Engineer), holding Resume.pdf, Resume.docx, Cover_Letter.pdf, Cover_Letter.docx and Job_Description.docx. The number is the application's order among that profile's resumes generated that day."],
   },
   {
     id: "application-detail",
@@ -145,13 +146,14 @@ export const HELP_PAGES: HelpPage[] = [
     roles: WORKSPACE,
     summary: "One application: the tailored resume, cover letter, job description, screenshots and submission.",
     steps: [
-      { title: "Review the documents", detail: "Use the Resume, Cover letter and Job description tabs. You can edit the cover letter and click Save cover letter; the next download uses it. Click Download ZIP when you're ready to apply." },
+      { title: "Review the documents", detail: "Use the Resume, Cover letter and Job description tabs (Chat is for interview practice, see below). You can edit the cover letter and click Save cover letter; the next download uses it. Click Download ZIP when you're ready to apply." },
       { title: "Open the job posting", detail: "Click Open job posting to apply on the company's site." },
       { title: "Attach screenshots", detail: "Upload, drag or paste (Ctrl+V) the confirmation screenshot. Click a thumbnail to view it full size." },
       { title: "Submit", detail: "Click Submit application to log the submission. To undo it, click Mark as not submitted or remove the last screenshot (not possible once paid)." },
       { title: "Not-generated applications", detail: "Paste the job description (at least 100 characters) and click Generate resume, cover letter & JD, or click Try the URL again." },
+      { title: "Practice the interview (Chat tab)", detail: "Open the Chat tab: it starts with \"Tell me about yourself.\" and the candidate's answer for this job. Ask any interview question (Enter sends, Shift+Enter for a new line) or click a suggested one; the candidate answers in full, in the first person, from this application's resume, cover letter, job description and profile. Copy answer copies one; Start over begins again." },
     ],
-    tips: ["Use Notes for the recruiter's name, a referral or a follow-up date, then click Save notes.", "If the company or role is missing, click Add company & role."],
+    tips: ["Use Notes for the recruiter's name, a referral or a follow-up date, then click Save notes.", "If the company or role is missing, click Add company & role.", "The chat isn't saved: switching to another tab clears it. Answers appear as they are written and never invent employers, projects or numbers."],
   },
   {
     id: "interview-requests",
@@ -260,7 +262,7 @@ export const HELP_PAGES: HelpPage[] = [
       { title: "Read a notification", detail: "Click it: an update opens its page, a message from an admin opens with any images. It's marked read." },
       { title: "See them all", detail: "Open Notifications (or View all in the bell) to see every notification, filter All / Unread or by type, or Mark all read." },
     ],
-    tips: ["Unread notifications pop up when you open the app, and new ones appear as a pop-up while you work.", "Turn on Desktop alerts in the bell to get interviews and new notifications on your computer, even when TailorBid is closed."],
+    tips: ["Unread notifications pop up when you open the app, and new ones appear as a pop-up while you work.", "Turn on Desktop alerts in the bell to get interviews and new notifications on your computer, even when TailorBid is closed.", "When a profile you use is edited by someone else, you get a notification saying which sections changed.", "While TailorBid is open, a window asks you to reload when a profile you use changes or your access changes (profiles, Interview Requests, pages). If your role changes or you are signed out, it asks you to sign in again. Choose Later to keep working; a bar stays at the top until you reload."],
   },
   {
     id: "feedback",
@@ -363,7 +365,7 @@ export const HELP_PAGES: HelpPage[] = [
       { title: "Activate / deactivate", detail: "Deactivated accounts can't sign in; their history is kept. Delete (admin) removes the account; its application history is kept." },
       { title: "Open an account", detail: "Click a name to see their usage, bids by profile and recent applications, or to resend the invite." },
     ],
-    tips: ["Users (profile managers) see only bidders; they can change the profiles they manage, the Manual job description limit and the Interview Requests page."],
+    tips: ["Users (profile managers) see only bidders; they can change the profiles they manage, the Manual job description limit and the Interview Requests page.", "Which pages each role can open is set on Page Access (admins).", "People with TailorBid open are asked to reload when their profiles or access change, and to sign in again when their role changes."],
   },
   {
     id: "admin-profiles",
@@ -373,12 +375,13 @@ export const HELP_PAGES: HelpPage[] = [
     roles: STAFF,
     summary: "Candidate profiles used to generate applications.",
     steps: [
-      { title: "Add a profile", detail: "Admins: click New profile. Fill in Personal, Contact & links, Address, Work & eligibility, Self-identification, About this developer, Resume content (experience and education) and Design, then click Create profile." },
+      { title: "Add a profile", detail: "Admins: click New profile. Fill in Personal, Contact & links, Address, Work & eligibility, Self-identification, About this developer, Resume content (experience and education) and Design, then click Create profile. A new profile starts with the usual answers filled in (Pronouns He/Him, authorized to work in the US, no sponsorship needed, US Citizen, United States, no clearance and the self-identification answers); change any that differ." },
       { title: "Import from a resume", detail: "In About this developer, use Import an existing resume (Choose file… or Or paste the text) and let AI fill in the fields; it is also kept as a reference for every new resume and cover letter. Review before saving." },
       { title: "Choose the API key and quota", detail: "In Settings, pick the OpenAI key / model and a monthly quota (0 = unlimited) for the profile." },
       { title: "Same-company cooldown", detail: "Optionally override the site's cooldown for this profile." },
       { title: "View, activate or deactivate", detail: "Use the row menu to View, Edit, Assign, Activate or Deactivate, or Delete (admin). Inactive profiles can't be used to generate; deleting keeps their application history." },
     ],
+    tips: ["Saving a change notifies the profile's bidders, callers and managers with the sections that changed (several saves within 10 minutes count as one). Changing the API key, model or quota doesn't notify anyone."],
   },
   {
     id: "admin-assignments",
@@ -390,7 +393,7 @@ export const HELP_PAGES: HelpPage[] = [
     steps: [
       { title: "By profile", detail: "Select a profile, then tick its managers (users / admins), bidders and callers, and click Save assignments." },
       { title: "Matrix", detail: "Switch to Matrix to see every profile × person; each tick saves immediately (violet = manages, indigo = bidder, green = caller)." },
-      { title: "Notifications", detail: "People whose assignments change are emailed automatically." },
+      { title: "Notifications", detail: "People whose assignments change are emailed automatically, and asked to reload if they have TailorBid open." },
     ],
   },
   {
@@ -403,7 +406,7 @@ export const HELP_PAGES: HelpPage[] = [
     steps: [
       { title: "Filter", detail: "Date range (YYYY-MM-DD), account, profile, status, payment (paid / not paid) and search." },
       { title: "Select rows", detail: "Tick rows (or the header box for the whole page). The bar shows the count and the fee total." },
-      { title: "Download", detail: "Above the table, Download ZIP: resume, cover letter & JD, Resumes only (ZIP), Resume PDFs or Cover letter PDFs downloads the ticked rows (up to 100; it tells you if none are selected). Download resumes and Download all documents at the top of the page download everything matching the filters." },
+      { title: "Download", detail: "Above the table, Download ZIP: resume, cover letter & JD, Resumes only (ZIP), Resume PDFs or Cover letter PDFs downloads the ticked rows (up to 100; it tells you if none are selected). Download resumes and Download all documents at the top of the page download everything matching the filters. Inside the ZIP, each application has its own folder: Date / Profile name / number_Job title (for example 2026-10-21/Jane_Doe/01_Senior_Software_Engineer), holding Resume.pdf, Resume.docx, Cover_Letter.pdf, Cover_Letter.docx and Job_Description.docx. The number is the application's order among that profile's resumes generated that day." },
       { title: "Mark as paid (admin)", detail: "Use Mark as paid / not paid in the bar, or Set paid on a row. Only submitted applications carry a fee." },
       { title: "Delete (admin)", detail: "Delete removes an application permanently. Paid applications can't be deleted." },
       { title: "Customize columns", detail: "Use Columns to choose which columns are shown." },
@@ -525,6 +528,23 @@ export const HELP_PAGES: HelpPage[] = [
       { title: "Watch and revoke", detail: "The list shows when each key was last used, from which IP, and how many requests it made. Revoke a key to stop it working immediately." },
     ],
     tips: ["API keys can read every profile and interview, including personal details. Share them only with systems you trust.", "OpenAI keys are managed separately on API Keys."],
+  },
+  {
+    id: "admin-page-access",
+    title: "Page Access",
+    path: "/admin/page-access",
+    match: ["/admin/page-access"],
+    roles: ["admin"],
+    summary: "Choose which pages each role (User, Bidder, Caller) can open. Admins always have every page.",
+    steps: [
+      { title: "Read the table", detail: "Pages are grouped into Workspace, Interview pages and Admin pages, with a column per role. A switch means the role can have the page; — means the role never uses it. My Page is always on." },
+      { title: "Turn pages off or on", detail: "Click a switch, then click Save. All on switches every page back on (it still needs Save)." },
+      { title: "What off means", detail: "The page disappears from that role's menu, its address sends them to their start page, and its data can't be loaded. Pages only admins use (Settings, API Keys, Logs…) are listed below the table and can't be given to other roles." },
+    ],
+    tips: [
+      "Changes apply within about 15 seconds of saving; people with TailorBid open are asked to reload.",
+      "A bidder's Interview Requests page also needs the switch on their account (Users & Bidders).",
+    ],
   },
   {
     id: "admin-settings",
