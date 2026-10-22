@@ -23,6 +23,7 @@ import {
   LayoutDashboard,
   LayoutGrid,
   LifeBuoy,
+  Link2,
   LogOut,
   Megaphone,
   Menu,
@@ -91,6 +92,7 @@ const ADMIN_MANAGE: NavItem[] = [
   { href: "/admin/profiles", label: "Profiles", icon: IdCard },
   { href: "/admin/assignments", label: "Assignments", icon: Workflow },
   { href: "/admin/applications", label: "Application History", icon: History },
+  { href: "/admin/job-links", label: "Job Links", icon: Link2 },
   { href: "/admin/interviews", label: "Interviews (Schedule)", icon: CalendarDays },
   { href: "/interview-history", label: "Interview History", icon: AudioLines },
 ];

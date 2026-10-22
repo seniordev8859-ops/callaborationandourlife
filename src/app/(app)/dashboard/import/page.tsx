@@ -6,6 +6,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useToast } from "@/components/Alerts";
 import { ArrowRight, CircleCheck, Link2, ListChecks, Pause, Play, RefreshCw, Sparkles, Square, X } from "lucide-react";
 import { Alert, api, ApiError, Badge, EmptyState, PageHeader, Spinner, useAsync, useClientPaging } from "@/components/ui";
+import { urlKey } from "@/lib/links";
 
 type ProfileOpt = { id: string; label: string; fullName: string; monthlyQuota: number; usedThisMonth: number };
 
@@ -53,24 +54,6 @@ function parseCsv(text: string): string[][] {
 
 const isUrl = (s: string) => /^https?:\/\/[^\s]+\.[^\s]+/i.test(s);
 
-/** Tracking parameters that don't change which job a link points to. */
-const TRACKING_PARAM = /^(utm_.*|gh_src|source|src|ref|referrer|trk|fbclid|gclid|lever-.*)$/i;
-
-/**
- * Key for spotting the same job pasted twice. The query string is kept, because many boards put the job in it
- * (Greenhouse embeds `?for=company&token=…`, `?gh_jid=`, `?ashby_jid=`, ADP `?reqId=`); only tracking parameters,
- * the #fragment, a trailing slash and the host's case are ignored.
- */
-function urlKey(u: string) {
-  try {
-    const url = new URL(u);
-    const params = [...url.searchParams].filter(([k]) => !TRACKING_PARAM.test(k)).sort(([a], [b]) => a.localeCompare(b));
-    const query = params.length ? `?${new URLSearchParams(params)}` : "";
-    return `${url.host.toLowerCase()}${url.pathname.replace(/\/+$/, "")}${query}`;
-  } catch {
-    return u;
-  }
-}
 const URL_HEADERS = /^(url|link|job ?url|job ?link|posting|posting ?url|job ?posting|href|apply ?url|application ?url)$/i;
 
 /** Extracts job URLs: a URL-named column if present, otherwise every cell that looks like a link. */

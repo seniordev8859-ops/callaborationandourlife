@@ -57,6 +57,7 @@ export const PAGES: PageDef[] = [
   { key: "admin-profiles", label: "Profiles", group: "Admin", href: "/admin/profiles", roles: STAFF },
   { key: "admin-assignments", label: "Assignments", group: "Admin", href: "/admin/assignments", roles: STAFF },
   { key: "admin-applications", label: "Application History", group: "Admin", href: "/admin/applications", roles: STAFF },
+  { key: "admin-job-links", label: "Job Links", group: "Admin", href: "/admin/job-links", roles: STAFF },
   { key: "admin-interviews", label: "Interviews (Schedule)", group: "Admin", href: "/admin/interviews", roles: STAFF },
   { key: "admin-work-time", label: "Work Time", group: "Admin", href: "/admin/work-time", roles: ["admin"] },
   { key: "admin-notifications", label: "Notifications (send)", group: "Admin", href: "/admin/notifications", roles: ["admin"] },
@@ -105,6 +106,7 @@ const API_RULES: { prefix: string; pages: string[]; write?: boolean }[] = [
   { prefix: "/api/admin/analytics", pages: ["admin-analytics"] },
   { prefix: "/api/admin/assignments", pages: ["admin-assignments"] },
   { prefix: "/api/admin/applications", pages: ["admin-applications", "interviews"] },
+  { prefix: "/api/admin/job-links", pages: ["admin-job-links"] },
   { prefix: "/api/admin/profiles", pages: ["admin-profiles"], write: true },
   { prefix: "/api/admin/users", pages: ["admin-users", "admin-overview"], write: true },
 ];
