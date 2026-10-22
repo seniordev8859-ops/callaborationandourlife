@@ -4,7 +4,7 @@ import { applicationZip, coverLetterPdf, resumePdf, zipFileName, zipResponse, ty
 import { oid } from "@/lib/query";
 import { applicationFileBases, applicationFolders } from "@/lib/zipLayout";
 
-/** ZIP of all documents ([Date]/[Profile]/[Company]/[Job Title]/…, see zipLayout.ts), or `?format=resume-pdf` / `?format=cover-pdf` for just the resume or cover letter PDF, named [Date]_[Profile]_[Company]_[Job Title]_Resume.pdf. */
+/** ZIP of all documents ([Date]/[Profile]/[Index]_[Job Title]_[Company]/…, see zipLayout.ts), or `?format=resume-pdf` / `?format=cover-pdf` for just the resume or cover letter PDF, named [Date]_[Profile]_[Index]_[Job Title]_[Company]_Resume.pdf. */
 export const GET = handler(async (req: Request, { params }: { params: Promise<{ id: string }> }) => {
   const user = await requireUser();
   const app = await Application.findById(oid((await params).id)).lean<

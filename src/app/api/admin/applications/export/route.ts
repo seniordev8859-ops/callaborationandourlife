@@ -26,7 +26,7 @@ function csvCell(v: unknown) {
   return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
 }
 
-/** Bulk ZIP download of generated documents ([Date]/[Profile]/[Company]/[Job Title]/… plus summary.csv), filtered by user / profile / date range. */
+/** Bulk ZIP download of generated documents ([Date]/[Profile]/[Index]_[Job Title]_[Company]/… plus summary.csv), filtered by user / profile / date range. */
 export const GET = handler(async (req: Request) => {
   const staff = await requireStaff();
   const sp = new URL(req.url).searchParams;

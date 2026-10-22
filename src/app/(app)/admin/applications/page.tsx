@@ -240,7 +240,7 @@ function History() {
     if (ids.length > 100) return toast.warning("Too many selected", "Select 100 applications or fewer per download, or use the filtered download buttons above.");
     setBulk(content);
     try {
-      // Always a ZIP, even for one PDF, so it keeps the [Date]/[Profile]/[Company]/[Job Title]/ folders.
+      // Always a ZIP, even for one PDF, so it keeps the [Date]/[Profile]/[Index]_[Job Title]_[Company]/ folders.
       await downloadFile("/api/applications/bulk-download", { all: "applications.zip", resume: "resumes.zip", "resume-pdf": "resume-pdfs.zip", "cover-pdf": "cover-letter-pdfs.zip" }[content], { ids, content });
     } catch (e) {
       toast.error("Download failed", (e as Error).message);

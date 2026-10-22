@@ -11,7 +11,7 @@ const MAX_SELECTED = 100;
 
 /**
  * POST { ids: string[], content?: "all" | "resume" | "resume-pdf" | "cover-pdf" } → one ZIP.
- * "all" (default): a folder per application, [Date]/[Profile]/[Company]/[Job Title] (zipLayout.ts), with resume PDF + DOCX,
+ * "all" (default): a folder per application, [Date]/[Profile]/[Index]_[Job Title]_[Company] (zipLayout.ts), with resume PDF + DOCX,
  * cover letter PDF + DOCX and job description DOCX; "resume": resumes only (PDF + DOCX, same folders); "resume-pdf" / "cover-pdf": just those PDFs,
  * in the same folders.
  * Bidders get their own applications; users (managers) those of their profiles; admins any.
