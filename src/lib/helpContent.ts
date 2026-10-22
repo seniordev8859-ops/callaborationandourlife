@@ -100,7 +100,7 @@ export const HELP_PAGES: HelpPage[] = [
       "The same company can't be applied to again with the same profile within the cooldown (30 days by default). A blocked bid is refused on screen with the date it becomes allowed.",
       "Already generated this job with this profile? You're told so: click View existing, or Generate anyway to make a new one.",
       "Generating is free; the fee is charged only when you submit.",
-      "Inside the ZIP, each application has its own folder: Date / Profile name / number_Job title (for example 2026-10-21/Jane_Doe/01_Senior_Software_Engineer), holding Resume.pdf, Resume.docx, Cover_Letter.pdf, Cover_Letter.docx and Job_Description.docx. The number is the application's order among that profile's resumes generated that day.",
+      "Inside the ZIP, each application has its own folder: Date / Profile name / number_Job title_Company (for example 2026-10-21/Jane_Doe/01_Senior_Software_Engineer_Acme_Corp), holding Resume.pdf, Resume.docx, Cover_Letter.pdf, Cover_Letter.docx and Job_Description.docx. The number is the application's order among that profile's resumes generated that day.",
     ],
   },
   {
@@ -136,7 +136,7 @@ export const HELP_PAGES: HelpPage[] = [
       { title: "Customize columns", detail: "Use Columns to show or hide table columns; your choice is remembered." },
       { title: "Check payment status", detail: "The Fee column shows each submitted application's fee and whether it is Paid or Not paid." },
     ],
-    tips: ["Paid applications can't be deleted or un-submitted.", "Bidders can't delete applications; ask an admin if one should be removed.", "Click a company or role to open the application's full details.", "Inside the ZIP, each application has its own folder: Date / Profile name / number_Job title (for example 2026-10-21/Jane_Doe/01_Senior_Software_Engineer), holding Resume.pdf, Resume.docx, Cover_Letter.pdf, Cover_Letter.docx and Job_Description.docx. The number is the application's order among that profile's resumes generated that day."],
+    tips: ["Paid applications can't be deleted or un-submitted.", "Bidders can't delete applications; ask an admin if one should be removed.", "Click a company or role to open the application's full details.", "Inside the ZIP, each application has its own folder: Date / Profile name / number_Job title_Company (for example 2026-10-21/Jane_Doe/01_Senior_Software_Engineer_Acme_Corp), holding Resume.pdf, Resume.docx, Cover_Letter.pdf, Cover_Letter.docx and Job_Description.docx. The number is the application's order among that profile's resumes generated that day."],
   },
   {
     id: "application-detail",
@@ -406,10 +406,23 @@ export const HELP_PAGES: HelpPage[] = [
     steps: [
       { title: "Filter", detail: "Date range (YYYY-MM-DD), account, profile, status, payment (paid / not paid) and search." },
       { title: "Select rows", detail: "Tick rows (or the header box for the whole page). The bar shows the count and the fee total." },
-      { title: "Download", detail: "Above the table, Download ZIP: resume, cover letter & JD, Resumes only (ZIP), Resume PDFs or Cover letter PDFs downloads the ticked rows (up to 100; it tells you if none are selected). Download resumes and Download all documents at the top of the page download everything matching the filters. Inside the ZIP, each application has its own folder: Date / Profile name / number_Job title (for example 2026-10-21/Jane_Doe/01_Senior_Software_Engineer), holding Resume.pdf, Resume.docx, Cover_Letter.pdf, Cover_Letter.docx and Job_Description.docx. The number is the application's order among that profile's resumes generated that day." },
+      { title: "Download", detail: "Above the table, Download ZIP: resume, cover letter & JD, Resumes only (ZIP), Resume PDFs or Cover letter PDFs downloads the ticked rows (up to 100; it tells you if none are selected). Download resumes and Download all documents at the top of the page download everything matching the filters. Inside the ZIP, each application has its own folder: Date / Profile name / number_Job title_Company (for example 2026-10-21/Jane_Doe/01_Senior_Software_Engineer_Acme_Corp), holding Resume.pdf, Resume.docx, Cover_Letter.pdf, Cover_Letter.docx and Job_Description.docx. The number is the application's order among that profile's resumes generated that day." },
       { title: "Mark as paid (admin)", detail: "Use Mark as paid / not paid in the bar, or Set paid on a row. Only submitted applications carry a fee." },
       { title: "Delete (admin)", detail: "Delete removes an application permanently. Paid applications can't be deleted." },
       { title: "Customize columns", detail: "Use Columns to choose which columns are shown." },
+    ],
+  },
+  {
+    id: "admin-job-links",
+    title: "Job Links",
+    path: "/admin/job-links",
+    match: ["/admin/job-links"],
+    roles: STAFF,
+    summary: "Every job link bidders generated from, listed once, with how many times it was generated and by whom.",
+    steps: [
+      { title: "Filter", detail: "Date range (YYYY-MM-DD), account, profile, status and search (company, role or URL)." },
+      { title: "No repeats", detail: "A link generated more than once (by any bidder or profile) is listed once. Links that only differ by tracking parameters (utm_…, ref, source), a #fragment, a trailing slash or capital letters in the site name count as the same link; links that differ in the job id after \"?\" stay separate." },
+      { title: "Copy or download", detail: "Copy all links copies every matching link, one per line, ready to paste into Generate Resume. Download TXT saves the same list; Download CSV adds company, role, number of applications, bidders and first / last generated dates." },
     ],
   },
   {
