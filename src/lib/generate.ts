@@ -237,15 +237,22 @@ const OUTPUT_CONTRACT = `
 # out, it overrides any instruction about delivering a file or leaving out the cover letter, and every content and
 # writing rule above still applies)
 
-Reply in plain text, not a file. At the very start of your reply, output exactly these two lines:
+This runs automatically: nobody can answer a question before the documents are written. Where the instructions say
+to ask for missing experience first, do not ask; write the strongest truthful application from the evidence given (a
+transferable-skills application where direct experience is missing) and never claim the missing experience.
+
+Reply in plain text, not a file. At the very start of your reply, output exactly these three lines:
 COMPANY: [Exact company name from the job description]
 ROLE: [Exact job title from the job description]
+HEADLINE: [The target professional headline shown under the candidate's name]
 
 Then a blank line, then the resume content the instructions above ask for. Do not repeat the candidate's name or
 contact details (the application adds the header). Start every section title on its own line with "# ", and keep
 the words SUMMARY, SKILLS, EXPERIENCE, PROJECTS and EDUCATION in the titles of those sections (for example
-"# PROFESSIONAL SUMMARY", "# TECHNICAL SKILLS"). In the experience section, write each job as a title line, a company
-line, a "Location | Dates" line, then its bullets, each starting with "• ".
+"# PROFESSIONAL SUMMARY", "# TECHNICAL SKILLS"). In the skills section, write one line per category as
+"Category Name: skill, skill, skill". In the experience section, write each job as a title line, a company line, a
+"Location | Dates" line, then its bullets, each starting with "• ". In the projects section, write each project as its
+name on its own line, then its lines, each starting with "• ".
 
 Then output exactly these two lines:
 ---
@@ -296,11 +303,17 @@ Cover letter:
 - Include at least one concrete number or result; 280 to 400 words.`;
 }
 
-export function fillPrompt(template: string, p: ProfileFields) {
+/** Placeholders with the job in them; a prompt using them gets the job inside the prompt instead of the user message. */
+const JOB_PLACEHOLDERS = ["{{JOB_DESCRIPTION_CONTENT}}", "{{JOB_DESCRIPTION_LINK}}"];
+
+export function fillPrompt(template: string, p: ProfileFields, job?: { text: string; url?: string }) {
   return template
     .split("{{CANDIDATE_PROFILE}}").join(candidateProfileText(p))
     .split("{{CANDIDATE_EMAIL}}").join(p.email || "")
-    .split("{{SIGN_OFF_NAME}}").join(p.fullName);
+    .split("{{SIGN_OFF_NAME}}").join(p.fullName)
+    .split("{{ADDITIONAL_VERIFIED_EXPERIENCE}}").join(p.about?.trim() || "None provided.")
+    .split("{{JOB_DESCRIPTION_CONTENT}}").join(job?.text ?? "")
+    .split("{{JOB_DESCRIPTION_LINK}}").join(job?.url || "(not provided; pasted by the user)");
 }
 
 /* ---------------------------------------------------------------- parser */
@@ -309,8 +322,11 @@ type ParsedExperience = { title: string; companyLine: string; dates: string; bul
 type Parsed = {
   company: string;
   role: string;
+  headline: string;
   summary: string;
   skills: string[];
+  /** Skills by category, when the reply writes "Category: a, b, c" lines. */
+  skillGroups: { category: string; items: string[] }[];
   experience: ParsedExperience[];
   projects: ResumeProject[];
   coverLetter: string;
@@ -324,6 +340,7 @@ export function parseResumeGPT(raw: string): Parsed {
   const head = (key: string) => unbold(new RegExp(`^\\s*\\**${key}\\**\\s*:\\s*(.+)$`, "im").exec(text)?.[1] ?? "");
   const company = head("COMPANY");
   const role = head("ROLE");
+  const headline = head("HEADLINE");
 
   // Split resume / cover letter at "---" + "COVER LETTER" (or just the COVER LETTER label).
   const splitAt = /^\s*-{3,}\s*\n+\s*#*\s*\**COVER LETTER\**\s*:?\s*$/im.exec(text) ?? /^\s*#*\s*\**COVER LETTER\**\s*:?\s*$/im.exec(text);
@@ -352,10 +369,9 @@ export function parseResumeGPT(raw: string): Parsed {
     .filter(Boolean)
     .join(" ");
 
-  const skillText = find("SKILL").map((l) => stripBullet(l)).join(" | ");
-  const skills = [
+  const skillItems = (text: string) => [
     ...new Set(
-      skillText
+      text
         .split(/\s*\|\s*|\s*;\s*/)
         .map((x) => unbold(x).replace(/^[^:|]{2,40}:\s*/, "").trim()) // drop "Category:" prefixes
         .flatMap((x) => (x.includes(",") && !x.includes("(") ? x.split(/\s*,\s*/) : [x]))
@@ -363,6 +379,13 @@ export function parseResumeGPT(raw: string): Parsed {
         .filter((x) => x && x.length < 60)
     ),
   ];
+  const skillLines = find("SKILL").map((l) => unbold(stripBullet(l)).trim()).filter(Boolean);
+  const skills = skillItems(skillLines.join(" | "));
+  const skillGroups = skillLines
+    .map((l) => /^([^:|]{2,40}):\s*(.+)$/.exec(l))
+    .filter((m): m is RegExpExecArray => !!m)
+    .map((m) => ({ category: m[1].trim(), items: skillItems(m[2]) }))
+    .filter((g) => g.items.length);
 
   // Experience: header lines (title / company - location / dates) followed by bullets.
   const experience: ParsedExperience[] = [];
@@ -412,7 +435,7 @@ export function parseResumeGPT(raw: string): Parsed {
     }
   }
 
-  return { company, role, summary, skills, experience, projects, coverLetter };
+  return { company, role, headline, summary, skills, skillGroups, experience, projects, coverLetter };
 }
 
 /* ------------------------------------------------------------ generation */
@@ -678,19 +701,22 @@ export async function generateApplication(
 ): Promise<GenerationResult> {
   // A custom prompt from Settings decides the content; the built-in rule checks below only apply to the default prompt.
   const custom = !!promptTemplate.trim() && promptTemplate.trim() !== DEFAULT_RESUME_PROMPT.trim();
-  const filled = fillPrompt(custom ? promptTemplate.trim() : DEFAULT_RESUME_PROMPT, profile);
+  const filled = fillPrompt(custom ? promptTemplate.trim() : DEFAULT_RESUME_PROMPT, profile, job);
   const system =
     withOutputContract(filled) +
     (extraInstructions ? `\n\nAdditional instructions from the administrator:\n${extraInstructions}` : "");
   const targets = jobTargets(job);
-  const user = `JOB DESCRIPTION LINK: ${job.url || "(not provided; pasted by the user)"}
+  const jobBlock = `JOB DESCRIPTION LINK: ${job.url || "(not provided; pasted by the user)"}
 
 JOB DESCRIPTION CONTENT:
-${job.text}
-
-${targets}
-
-${HUMAN_STYLE}`;
+${job.text}`;
+  // A custom prompt is followed as written: no keyword targets or style rules of our own, which would override its
+  // evidence rules (e.g. "every job keyword in the skills", "a number in most bullets").
+  const user = !custom
+    ? `${jobBlock}\n\n${targets}\n\n${HUMAN_STYLE}`
+    : JOB_PLACEHOLDERS.some((ph) => promptTemplate.includes(ph))
+      ? "Write the resume and cover letter for the job description given above, following every instruction and the required output layout."
+      : jobBlock;
 
   let completion = await callModel(openai, system, user);
   let parsed = parseResumeGPT(completion.choices[0]?.message?.content ?? "");
@@ -724,12 +750,13 @@ ${HUMAN_STYLE}`;
     const bullets = (ai?.bullets ?? []).map((b) => cleanResume(b)).filter(Boolean);
     const base = {
       company: e.company,
-      title: tailoredTitle(e.title || "", ai?.title ?? ""),
+      // A custom prompt's job titles stay exactly as in the profile; the default prompt allows a short "(focus)" suffix.
+      title: custom ? e.title || "" : tailoredTitle(e.title || "", ai?.title ?? ""),
       location: e.location || "",
       startDate: e.startDate || "",
       endDate: e.current ? "" : e.endDate || "",
     };
-    if (isInternship(e.title || "")) {
+    if (!custom && isInternship(e.title || "")) {
       const source =
         ai?.description ||
         (bullets.length ? bullets.slice(0, 2).map((b) => (/[.!?]$/.test(b) ? b : `${b}.`)).join(" ") : "") ||
@@ -755,7 +782,12 @@ ${HUMAN_STYLE}`;
   const resume: ResumeContent = {
     fullName: profile.fullName,
     headline: RESUME_HEADLINE,
-    ...(profile.professionalTitle?.trim() ? { titleLine: profile.professionalTitle.trim() } : {}),
+    // A custom prompt's target headline (HEADLINE line) is shown under the name; otherwise the profile's title.
+    ...(custom && parsed.headline
+      ? { titleLine: cleanResume(parsed.headline) }
+      : profile.professionalTitle?.trim()
+        ? { titleLine: profile.professionalTitle.trim() }
+        : {}),
     contact: {
       email: profile.email || "",
       phone: profile.phone || "",
@@ -765,7 +797,10 @@ ${HUMAN_STYLE}`;
       github: "",
     },
     summary: cleanResume(parsed.summary || profile.summary || ""),
-    skills: [{ category: "", items: (parsed.skills.length ? parsed.skills : profile.skills).map((x) => cleanResume(x)).filter(Boolean) }],
+    skills:
+      custom && parsed.skillGroups.length > 1
+        ? parsed.skillGroups.map((g) => ({ category: cleanResume(g.category), items: g.items.map((x) => cleanResume(x)).filter(Boolean) }))
+        : [{ category: "", items: (parsed.skills.length ? parsed.skills : profile.skills).map((x) => cleanResume(x)).filter(Boolean) }],
     experience,
     projects: parsed.projects
       .slice(0, 4)
@@ -774,7 +809,7 @@ ${HUMAN_STYLE}`;
         description: cleanResume(p.description ?? ""),
         bullets: p.bullets.map((b) => cleanResume(b)).filter(Boolean).slice(0, 3),
       }))
-      .filter((p) => p.name && p.bullets.length),
+      .filter((p) => p.name && (p.bullets.length || p.description)),
     education: profile.education.map((e) => ({
       university: e.university,
       degree: e.degree || "",
@@ -787,7 +822,7 @@ ${HUMAN_STYLE}`;
 
   // The prompt (e.g. a resume-only custom prompt) produced no cover letter: write it with a dedicated request.
   if (!parsed.coverLetter.trim()) {
-    const letter = await writeCoverLetter(openai, profile, resume, `${job.text}\n\n${targets}\n\n${HUMAN_STYLE}`, extraInstructions, custom ? filled : "");
+    const letter = await writeCoverLetter(openai, profile, resume, custom ? job.text : `${job.text}\n\n${targets}\n\n${HUMAN_STYLE}`, extraInstructions, custom ? filled : "");
     if (letter) {
       parsed.coverLetter = letter.coverLetter;
       if (!parsed.company) parsed.company = letter.company;
@@ -810,7 +845,8 @@ ${HUMAN_STYLE}`;
   const jobTitle = parsed.role || job.title || "";
 
   // Weak Job match (company, role or top skills missing): one focused revision, kept only if it scores higher.
-  if (coverLetter) {
+  // Default prompt only: the revision adds keywords and sets a length, which a custom prompt decides itself.
+  if (coverLetter && !custom) {
     const better = await improveCoverLetter(openai, profile, resume, coverLetter, { text: job.text, company, role: jobTitle });
     if (better) {
       if (better.coverLetter) coverLetter = finishLetter(better.coverLetter);

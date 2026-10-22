@@ -208,7 +208,8 @@ export default function PromptTestPage() {
                 />
                 <p className="hint leading-relaxed">
                   Placeholders: <code className={CODE}>{"{{CANDIDATE_PROFILE}}"}</code>, <code className={CODE}>{"{{CANDIDATE_EMAIL}}"}</code>,{" "}
-                  <code className={CODE}>{"{{SIGN_OFF_NAME}}"}</code>. The job link and description are sent separately.
+                  <code className={CODE}>{"{{SIGN_OFF_NAME}}"}</code>, <code className={CODE}>{"{{JOB_DESCRIPTION_CONTENT}}"}</code>, <code className={CODE}>{"{{JOB_DESCRIPTION_LINK}}"}</code>,{" "}
+                  <code className={CODE}>{"{{ADDITIONAL_VERIFIED_EXPERIENCE}}"}</code>. Without the job placeholders, the job link and description are sent separately.
                 </p>
               </div>
               <div>

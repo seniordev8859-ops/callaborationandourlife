@@ -213,7 +213,8 @@ export default function SettingsPage() {
             </div>
             <p className="card-description leading-relaxed">
               Sent to OpenAI for every application. Placeholders: <code className={CODE}>{"{{CANDIDATE_PROFILE}}"}</code>, <code className={CODE}>{"{{CANDIDATE_EMAIL}}"}</code>,{" "}
-              <code className={CODE}>{"{{SIGN_OFF_NAME}}"}</code>. The job link and job description are sent separately. Keep the COMPANY/ROLE lines, the # section titles and the
+              <code className={CODE}>{"{{SIGN_OFF_NAME}}"}</code>, <code className={CODE}>{"{{JOB_DESCRIPTION_CONTENT}}"}</code>, <code className={CODE}>{"{{JOB_DESCRIPTION_LINK}}"}</code>,{" "}
+              <code className={CODE}>{"{{ADDITIONAL_VERIFIED_EXPERIENCE}}"}</code> (the profile&apos;s About text). Without the job placeholders, the job link and description are sent separately. A custom prompt is followed as written: the built-in keyword targets, bullet checks and cover letter revision apply only to the default prompt. Keep the COMPANY/ROLE lines, the # section titles and the
               &quot;---&quot; + &quot;COVER LETTER&quot; separator so documents can be built.
             </p>
           </div>
