@@ -7,7 +7,7 @@ import { useRole } from "@/components/AppShell";
 import { useConfirm, useToast } from "@/components/Alerts";
 import ProfileDetails, { type ProfileDetail } from "@/components/ProfileDetails";
 import { DesignThumb } from "@/components/DesignPicker";
-import { DEFAULT_DESIGN, DESIGNS, isDesignId } from "@/lib/designs";
+import { DEFAULT_DESIGN, designInfo } from "@/lib/designs";
 import { ActionMenu } from "@/components/ActionMenu";
 import { Activity, CalendarDays, FileText, History, KeyRound, Pencil, Power, PowerOff, Sparkles, Trash2, UserPlus } from "lucide-react";
 import { Alert, api, ApiError, Badge, PageHeader, Section, Spinner, PageSkeleton, Stat, useAsync } from "@/components/ui";
@@ -188,7 +188,7 @@ export default function ProfileView({ params }: { params: Promise<{ id: string }
               ["resume", "Resume", p.resumeDesign],
               ["letter", "Cover letter", p.coverLetterDesign],
             ] as const).map(([kind, label, value]) => {
-              const design = DESIGNS.find((d) => d.id === (isDesignId(value) ? value : DEFAULT_DESIGN))!;
+              const design = designInfo(value || DEFAULT_DESIGN);
               return (
                 <div key={kind} className="rounded-lg border border-slate-200 p-3">
                   <DesignThumb kind={kind} id={design.id} />

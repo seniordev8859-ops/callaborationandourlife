@@ -2,8 +2,8 @@
 
 import { Check } from "lucide-react";
 import type { ResumeContent } from "@/lib/generate";
-import { DESIGNS, atsSpec, designSpec, type DesignId } from "@/lib/designs";
-import ResumePreview, { AtsLetter, AtsResume, DesignedLetter, DesignedResume } from "./ResumePreview";
+import { DESIGNS, atsSpec, lookOf, type DesignId } from "@/lib/designs";
+import { AtsLetter, AtsResume } from "./ResumePreview";
 
 const SAMPLE: ResumeContent = {
   fullName: "Alex Kim",
@@ -36,21 +36,14 @@ const SAMPLE_DATE = new Date().toLocaleDateString("en-US", { month: "long", day:
 /** Renders the design at full size and scales it into the card, so thumbnails always match the real preview. */
 export function DesignThumb({ kind, id }: { kind: "resume" | "letter"; id: DesignId }) {
   const a = atsSpec(id);
-  const d = designSpec(id);
   const SCALE = 0.42;
   return (
     <div className="pointer-events-none relative h-44 overflow-hidden rounded-md" style={{ background: "#fff" }}>
       <div style={{ width: `${100 / SCALE}%`, transform: `scale(${SCALE})`, transformOrigin: "top left", padding: 36, background: "#fff" }}>
         {kind === "resume" ? (
-          a ? <AtsResume r={SAMPLE} a={a} /> : d ? <DesignedResume r={SAMPLE} d={d} /> : <ResumePreview r={SAMPLE} />
-        ) : a ? (
-          <AtsLetter r={SAMPLE} a={a} date={SAMPLE_DATE} text={SAMPLE_LETTER} company="Bloom" jobTitle="Senior Software Engineer" />
-        ) : d ? (
-          <DesignedLetter r={SAMPLE} d={d} date={SAMPLE_DATE} text={SAMPLE_LETTER} />
+          <AtsResume r={SAMPLE} a={a} />
         ) : (
-          <div className="font-serif text-[14px] leading-relaxed whitespace-pre-wrap" style={{ color: "#000" }}>
-            {SAMPLE_LETTER}
-          </div>
+          <AtsLetter r={SAMPLE} a={a} date={SAMPLE_DATE} text={SAMPLE_LETTER} company="Bloom" jobTitle="Senior Software Engineer" />
         )}
       </div>
     </div>
@@ -61,7 +54,8 @@ export default function DesignPicker({ kind, value, onChange }: { kind: "resume"
   return (
     <div role="radiogroup" className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
       {DESIGNS.map((x) => {
-        const selected = (value || "standard") === x.id;
+        // Retired designs are shown as the look they now render as.
+        const selected = lookOf(value) === x.id;
         return (
           <button
             key={x.id}

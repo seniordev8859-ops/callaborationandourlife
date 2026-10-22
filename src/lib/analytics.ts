@@ -2,7 +2,7 @@ import { Types } from "mongoose";
 import { Application } from "./models/Application";
 import { InterviewRequest } from "./models/InterviewRequest";
 import { User } from "./models/User";
-import { DESIGNS, isDesignId } from "./designs";
+import { DESIGN_NAMES, isDesignId } from "./designs";
 
 type AppRow = {
   _id: Types.ObjectId;
@@ -115,7 +115,7 @@ export async function computeAnalytics(scope: Types.ObjectId[] | null, from: Dat
 
   const userIds = [...new Set([...apps.map((a) => String(a.user)), ...chainList.map((c) => c.bidder)])];
   const users = new Map((await User.find({ _id: { $in: userIds } }).select("name").lean()).map((u) => [String(u._id), u.name]));
-  const designName = (id: string) => DESIGNS.find((d) => d.id === id)?.name ?? "Standard";
+  const designName = (id: string) => (isDesignId(id) ? DESIGN_NAMES[id] : "Standard");
 
   const byProfile = group(
     (a) => [String(a.profile), a.profileLabel || "(deleted profile)"],
