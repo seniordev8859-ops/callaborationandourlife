@@ -1,6 +1,9 @@
 import { AlignmentType, BorderStyle, Document, HeadingLevel, LevelFormat, Packer, Paragraph, TextRun } from "docx";
+import fontkit from "@pdf-lib/fontkit";
+import { readFile } from "fs/promises";
 import JSZip from "jszip";
-import { PDFDocument, StandardFonts, rgb, setCharacterSpacing, type PDFFont, type PDFPage, type RGB } from "pdf-lib";
+import path from "path";
+import { PDFDocument, rgb, setCharacterSpacing, type PDFFont, type PDFPage, type RGB } from "pdf-lib";
 import { formatRange, type ResumeContent } from "./generate";
 import { displayUrl } from "./links";
 import { resumeHeadline } from "./headline";
@@ -126,7 +129,7 @@ function docxShell(children: Paragraph[], margins = 720, font = FONT, color = BL
 
 /** Every design renders with the resume prompt's layout (lib/designs.ts). */
 export async function resumeDocx(r: ResumeContent, design?: string | null): Promise<Buffer> {
-  return atsResumeDocx(r, atsSpec(design));
+  return atsResumeDocx(r, await fitOnePage(r, atsSpec(design)));
 }
 
 const CLOSING = /^(sincerely|best regards|kind regards|warm regards|regards|best|respectfully|thank you),?$/i;
@@ -202,8 +205,8 @@ export async function jobDescriptionDocx(app: AppDocSource): Promise<Buffer> {
 
 /* ------------------------------------------------------------------- PDF */
 
-// Standard PDF fonts only support WinAnsi; normalise everything else. Tabs and line breaks become a space:
-// drawText can't encode them ("WinAnsi cannot encode … (0x000a)"), and a stray line break in a one-line field
+// Keep PDF text to the WinAnsi range, which the embedded font covers; normalise everything else. Tabs and line
+// breaks become a space: drawText can't encode them ("WinAnsi cannot encode … (0x000a)"), and a stray line break in a one-line field
 // (a title, a location, a date) made the whole download fail. Paragraphs are split on "\n" before this runs.
 function winAnsi(text: string) {
   return text
@@ -318,17 +321,25 @@ class PdfWriter {
   }
 }
 
+/**
+ * TailorBid Sans: Carlito, which has Calibri's exact letter widths, trimmed to WinAnsi (src/lib/fonts/README.txt, SIL
+ * Open Font License). The PDF looks like the Calibri Word file and the one-page fit measured on it holds for both.
+ * Embedded whole (about 24 KB each): pdf-lib's own subsetting drops Carlito's glyphs. Traced by next.config.ts.
+ */
+let pdfFontFiles: Promise<Buffer[]> | null = null;
+const fontFiles = () =>
+  (pdfFontFiles ??= Promise.all(["TailorBidSans-Regular.ttf", "TailorBidSans-Bold.ttf"].map((f) => readFile(path.join(process.cwd(), "src/lib/fonts", f)))));
+
 async function newPdf() {
   const doc = await PDFDocument.create();
-  const fonts = {
-    regular: await doc.embedFont(StandardFonts.Helvetica),
-    bold: await doc.embedFont(StandardFonts.HelveticaBold),
-  };
+  doc.registerFontkit(fontkit);
+  const [regular, bold] = await fontFiles();
+  const fonts = { regular: await doc.embedFont(regular), bold: await doc.embedFont(bold) };
   return { doc, fonts };
 }
 
 export async function resumePdf(r: ResumeContent, design?: string | null): Promise<Uint8Array> {
-  return atsResumePdf(r, atsSpec(design));
+  return (await atsResumePdf(r, await fitOnePage(r, atsSpec(design)))).save();
 }
 
 export async function coverLetterPdf(app: AppDocSource): Promise<Uint8Array> {
@@ -516,7 +527,28 @@ function atsPdfKit(w: PdfWriter, a: AtsSpec, bodyPt: number) {
   return { para, heading, header, rule, ruleRgb };
 }
 
-async function atsResumePdf(r: ResumeContent, a: AtsSpec): Promise<Uint8Array> {
+/**
+ * The prompt's one-page rule: when the resume runs past one page, tighten the spacing, then the type sizes (never
+ * below 9 pt, contact line as specified), and use the first layout that fits. Measured with the PDF renderer, whose
+ * Helvetica is wider than Calibri, so the Word file fits too. Content that is still too long keeps the tightest layout.
+ */
+async function fitOnePage(r: ResumeContent, a: AtsSpec): Promise<AtsSpec> {
+  const L = a.resume;
+  const tight = { ...L, firstSectionBefore: 4, sectionBefore: 5, sectionAfter: 2, bulletAfter: 1, entryGap: 3 };
+  const steps: AtsSpec["resume"][] = [
+    L,
+    tight,
+    { ...tight, name: 18, headline: 9.5, heading: 10, title: 9.5, body: 9.3, bullet: 9.1 },
+    { ...tight, name: 18, headline: 9.5, heading: 10, title: 9.2, meta: 9, body: 9, bullet: 9 },
+  ];
+  for (const resume of steps) {
+    const spec = { ...a, resume };
+    if ((await atsResumePdf(r, spec)).getPageCount() === 1) return spec;
+  }
+  return { ...a, resume: steps[steps.length - 1] };
+}
+
+async function atsResumePdf(r: ResumeContent, a: AtsSpec): Promise<PDFDocument> {
   const { doc, fonts } = await newPdf();
   doc.setTitle(`${r.fullName} - Resume`);
   doc.setAuthor(r.fullName);
@@ -575,7 +607,7 @@ async function atsResumePdf(r: ResumeContent, a: AtsSpec): Promise<Uint8Array> {
       k.para([{ text: e.university, bold: true }, ...(rest ? [{ text: ` | ${rest}` }] : [])]);
     });
   }
-  return doc.save();
+  return doc;
 }
 
 async function atsLetterPdf(app: AppDocSource, a: AtsSpec): Promise<Uint8Array> {

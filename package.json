@@ -16,6 +16,7 @@
     "assistant:test": "npm --prefix assistant test"
   },
   "dependencies": {
+    "@pdf-lib/fontkit": "^1.1.1",
     "bcryptjs": "^3.0.3",
     "cheerio": "^1.2.0",
     "cloudinary": "^2.11.0",

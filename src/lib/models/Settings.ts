@@ -12,7 +12,7 @@ const SettingsSchema = new Schema(
     myPageNotice: { type: String, default: "" },
     /** Extra instructions appended to every generation prompt. */
     promptInstructions: { type: String, default: "" },
-    /** Full resume/cover-letter prompt; "" = the built-in ResumeGPT template (lib/resumePrompt.ts). */
+    /** Full resume/cover-letter prompt; "" = the built-in default prompt (lib/resumePrompt.ts). */
     resumePromptTemplate: { type: String, default: "" },
     /** IANA timezone that defines "a day" for the midnight report and daily milestones. */
     reportTimezone: { type: String, default: "America/New_York" },

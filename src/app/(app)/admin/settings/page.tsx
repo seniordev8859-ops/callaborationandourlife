@@ -214,7 +214,7 @@ export default function SettingsPage() {
             <p className="card-description leading-relaxed">
               Sent to OpenAI for every application. Placeholders: <code className={CODE}>{"{{CANDIDATE_PROFILE}}"}</code>, <code className={CODE}>{"{{CANDIDATE_EMAIL}}"}</code>,{" "}
               <code className={CODE}>{"{{SIGN_OFF_NAME}}"}</code>, <code className={CODE}>{"{{JOB_DESCRIPTION_CONTENT}}"}</code>, <code className={CODE}>{"{{JOB_DESCRIPTION_LINK}}"}</code>,{" "}
-              <code className={CODE}>{"{{ADDITIONAL_VERIFIED_EXPERIENCE}}"}</code> (the profile&apos;s About text). Without the job placeholders, the job link and description are sent separately. A custom prompt is followed as written: the built-in keyword targets, bullet checks and cover letter revision apply only to the default prompt. Keep the COMPANY/ROLE lines, the # section titles and the
+              <code className={CODE}>{"{{ADDITIONAL_VERIFIED_EXPERIENCE}}"}</code> (the profile&apos;s About text). Without the job placeholders, the job link and description are sent separately. The prompt is followed as written; the app only adds the reply layout it reads, and writes the cover letter separately when the prompt has none. Keep the COMPANY/ROLE lines, the # section titles and the
               &quot;---&quot; + &quot;COVER LETTER&quot; separator so documents can be built.
             </p>
           </div>
@@ -227,7 +227,7 @@ export default function SettingsPage() {
                 if (
                   await confirm({
                     title: "Reset the prompt?",
-                    message: "Your edits are replaced with the default ResumeGPT prompt. Nothing is saved until you click Save settings.",
+                    message: "Your edits are replaced with the default prompt (Premium one-page Senior Software Engineer resume). Nothing is saved until you click Save settings.",
                     confirmLabel: "Reset to default",
                     danger: true,
                   })

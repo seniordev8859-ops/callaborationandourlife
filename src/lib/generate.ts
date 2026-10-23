@@ -3,7 +3,6 @@ import type { ResolvedOpenAI } from "./openaiKeys";
 import type { ProfileFields } from "./models/Profile";
 import { DEFAULT_RESUME_PROMPT } from "./resumePrompt";
 import { RESUME_HEADLINE } from "./headline";
-import { jobKeywords, mentionsKeyword, resumeText as resumePlainText, scoreCoverLetter, type JobKeyword } from "./matchScore";
 
 export type ResumeExperience = {
   company: string;
@@ -12,21 +11,9 @@ export type ResumeExperience = {
   startDate: string;
   endDate: string;
   bullets: string[];
-  /** Internships: a two- or three-sentence description instead of bullets. */
+  /** Older records: internships were written as a short description instead of bullets. */
   description?: string;
 };
-
-/** Roles rendered as a short description instead of bullets. */
-export function isInternship(title: string) {
-  return /\bintern(ship)?s?\b/i.test(title || "");
-}
-
-/** At most three sentences of a text (internship details are two or three sentences). */
-function twoSentences(text: string) {
-  const parts = (text || "").replace(/\s+/g, " ").trim().match(/[^.!?]+[.!?]+(\s|$)/g) ?? [];
-  const out = parts.slice(0, 3).join("").trim();
-  return out || (text || "").trim();
-}
 
 export type ResumeProject = { name: string; description?: string; techStack?: string[]; bullets: string[] };
 
@@ -92,28 +79,6 @@ const TECH_FIXES: [RegExp, string][] = [
   [/\bkubernetes\b/gi, "Kubernetes"],
 ];
 const fixTech = (s: string) => TECH_FIXES.reduce((t, [re, rep]) => t.replace(re, rep), s);
-
-/**
- * Human writing rules sent with every generation call (any prompt): the resume and cover letter should read as
- * written by the candidate, not by an AI. HUMAN_FIXES below catches the words that still slip through.
- */
-export const HUMAN_STYLE = `HUMAN WRITING (required for the resume and the cover letter; it changes only the wording, never the keywords
-or the format above):
-- Write like an experienced engineer describing their own work to a peer: plain, specific, confident words. Every
-  sentence must say something concrete (what was built, for whom, with what, and what changed).
-- Vary sentence length and structure. Do not give every bullet the same shape ("Verb X, resulting in Y% Z"); mix in
-  bullets that lead with the problem, the scale or the result. Use realistic, uneven numbers (17%, 3.2x, 40 minutes),
-  not only round ones (30%, 50%).
-- Never use these AI-sounding words or phrases: leverage, utilize, spearhead, synergy, delve, robust, seamless,
-  cutting-edge, state-of-the-art, innovative, dynamic, fast-paced, results-driven, passionate, thrilled, excited to,
-  eager to, tapestry, landscape, realm, testament, elevate, foster, harness, empower, pivotal, game-changer,
-  transformative, holistic, paradigm, unwavering, meticulous, navigate, streamline, "in today's", "I am writing to",
-  "I believe", "proven track record", "a wide range of", "plays a crucial role".
-- Prefer plain verbs: built, led, shipped, cut, moved, rewrote, ran, fixed, designed, owned, added, scaled, replaced,
-  automated, migrated, launched, debugged, set up, trained, reviewed.
-- No filler openers or closers, no lists of three adjectives, no rhetorical questions, no exclamation marks.
-- Cover letter: sound like a real person: first person, short paragraphs, contractions are fine (I've, I'd), one
-  specific reason for wanting this company and role, and a simple, direct closing.`;
 
 /** Leftover AI-sounding words → plain ones (case kept for the first letter). */
 const HUMAN_FIXES: [RegExp, string][] = [
@@ -226,12 +191,26 @@ export function candidateProfileText(p: ProfileFields) {
   return lines.join("\n");
 }
 
+/** Cover letter rules for prompts that have none (the default prompt is resume-only). */
+const letterRules = (name: string) => `- 250 to 350 words, one page, first person, plain text: no bullets, bold, links or dashes of any kind.
+- Start with "Dear Hiring Manager," with nothing above it.
+- Opening: the exact company name, the exact position and one concrete reason this engineering work interests the
+  candidate. Do not open with "I am writing to express", "I am thrilled to apply" or "As a passionate".
+- Then the two or three most important engineering responsibilities in the job description, tied to the candidate's
+  strongest verified work, with real implementation detail.
+- Then one specific example of how the candidate approaches engineering problems (root cause, architecture,
+  reliability, testing or ownership).
+- Close by tying that experience to the company's priorities, with a short, natural request to talk.
+- Complement the resume rather than repeating its bullets. Never invent employers, metrics, credentials or claims about
+  the company.
+- End with "Sincerely," on its own line, then "${name}".`;
+
 /**
- * The reply layout the parser depends on. Appended when a prompt (e.g. a custom one from Settings) doesn't ask for
- * the COMPANY/ROLE lines and the cover letter, so every prompt yields a company, a role and a cover letter.
+ * The reply layout the parser depends on. Appended when a prompt doesn't ask for the COMPANY/ROLE lines and the cover
+ * letter, so every prompt yields a company, a role, a headline and a cover letter.
  * Layout only: the content and writing rules (sections, bullet counts, letter style) stay with the prompt.
  */
-const OUTPUT_CONTRACT = `
+const outputContract = (name: string) => `
 
 # REQUIRED OUTPUT LAYOUT (set by the application so it can read your reply; it only changes how the reply is laid
 # out, it overrides any instruction about delivering a file or leaving out the cover letter, and every content and
@@ -259,48 +238,14 @@ Then output exactly these two lines:
 COVER LETTER
 
 Then a blank line, then the cover letter written as the instructions above describe, in plain text, starting at the
-greeting (nothing above it). If the instructions say nothing about a cover letter, write a tailored one that starts
-with "Dear Hiring Manager," and ends with "Sincerely," and the candidate's name.`;
+greeting (nothing above it). If the instructions say nothing about a cover letter, write one following these rules:
+${letterRules(name)}`;
 
-/** Adds OUTPUT_CONTRACT unless the prompt already asks for the header lines and the cover letter section. */
-export function withOutputContract(prompt: string) {
+/** Adds the output layout unless the prompt already asks for the header lines and the cover letter section. */
+export function withOutputContract(prompt: string, name: string) {
   const asksHeader = /^\s*COMPANY\s*:/m.test(prompt) && /^\s*ROLE\s*:/m.test(prompt);
   const asksLetter = /^\s*COVER LETTER\s*$/m.test(prompt);
-  return asksHeader && asksLetter ? prompt : prompt + OUTPUT_CONTRACT;
-}
-
-/**
- * Job keywords the match score (lib/matchScore.ts) measures, sent with the job description so any prompt tailors the
- * resume and cover letter to them: hard skills, repeated domain phrases, the job title, length and metrics.
- */
-export function jobTargets(job: { text: string; title?: string; company?: string }) {
-  const { hard, soft } = jobKeywords(job.text);
-  const name = (k: JobKeyword) => (k.alts?.length ? `${k.term} (or ${k.alts.join(" / ")})` : k.term);
-  const required = hard.filter((k) => k.required).map(name);
-  const other = hard.filter((k) => !k.required).map(name);
-  const top = hard.slice(0, 10).map((k) => k.term);
-  const title = job.title?.trim() ? `"${job.title.trim()}"` : "the exact job title from the posting";
-  return `JOB MATCH TARGETS (the resume and cover letter are scored against these job description keywords; follow them
-together with the prompt's rules):
-- Required keywords: ${required.join(", ") || "(none found)"}
-- Other keywords: ${other.join(", ") || "(none found)"}
-- Domain phrases: ${soft.join(", ") || "(none found)"}
-Resume:
-- Use the exact spelling of every required and other keyword at least once; put each one in the skills section and
-  work the most important ones into the summary and the experience bullets. For "(or …)" keywords one is enough.
-- Use every domain phrase word for word at least once (the summary can tie the candidate's work to the company's
-  domain, e.g. "wants to bring ... to ${soft.slice(0, 2).join(" and ") || "the company's mission"}").
-- Name the target role ${title} in the first sentence of the summary.
-- At least two of every three experience bullets include a number (%, $, count, time saved or scale).
-- Total length 450 to 900 words.
-Cover letter:
-- Name the company${job.company?.trim() ? ` ("${job.company.trim()}")` : " by its exact name from the posting"} in the first paragraph and once more later.
-  The rule against a header above the greeting only means no name / company / title lines before "Dear": the letter's
-  body must still name the company.
-- Name the role ${title} in the first paragraph.
-- Use each of these top skills by its exact spelling, tied to real work from the resume (at least eight of them):
-  ${top.join(", ") || "(none found)"}.
-- Include at least one concrete number or result; 280 to 400 words.`;
+  return asksHeader && asksLetter ? prompt : prompt + outputContract(name);
 }
 
 /** Placeholders with the job in them; a prompt using them gets the job inside the prompt instead of the user message. */
@@ -334,7 +279,7 @@ type Parsed = {
 
 const DATE_LINE = /((jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?\s+\d{4}|\b(19|20)\d{2}\b).*(present|current|now|\d{4})|^(19|20)\d{2}$/i;
 
-/** Parses the ResumeGPT text format into structured parts. Tolerant of small format drift. */
+/** Parses the reply (COMPANY/ROLE/HEADLINE lines, # sections, cover letter) into structured parts. Tolerant of small format drift. */
 export function parseResumeGPT(raw: string): Parsed {
   const text = raw.replace(/\r\n/g, "\n").replace(/^```[a-z]*\n?|```$/gim, "");
   const head = (key: string) => unbold(new RegExp(`^\\s*\\**${key}\\**\\s*:\\s*(.+)$`, "im").exec(text)?.[1] ?? "");
@@ -444,112 +389,9 @@ function norm(s: string) {
   return s.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
 }
 
-/** Keeps the profile's title; allows only a short tailoring suffix in parentheses (per the prompt). */
-function tailoredTitle(original: string, ai: string) {
-  const o = (original || "").trim();
-  const a = unbold(ai || "");
-  if (!o) return a;
-  if (!a) return o;
-  let paren = /\(([^)]{1,80})\)\s*$/.exec(a)?.[1]?.trim();
-  // "something short" per the prompt: keep at most ~30 characters of comma-separated focus areas.
-  if (paren && paren.length > 30) {
-    const kept: string[] = [];
-    for (const part of paren.split(/\s*,\s*/)) if ([...kept, part].join(", ").length <= 30) kept.push(part);
-    paren = kept.join(", ");
-  }
-  if (norm(a).startsWith(norm(o))) return paren ? `${o} (${paren})` : o;
-  return o;
-}
-
-/* --------------------------------------------------- bullet rule repair */
-
-const MIN_WORDS = 17;
-const words = (s: string) => s.trim().split(/\s+/).filter(Boolean).length;
-const firstVerb = (s: string) => s.trim().split(/\s+/)[0]?.toLowerCase().replace(/[^a-z]/g, "") ?? "";
-
-const sentenceCount = (t: string) => ((t || "").trim().match(/[^.!?]+[.!?]+(\s|$)/g) ?? []).length;
-
-/** Roles that break the prompt's bullet rules (count, ≥17 words, unique opening verbs). */
-function bulletProblems(exps: ResumeExperience[]) {
-  const seen = new Map<string, number>();
-  exps.forEach((e) => e.bullets.forEach((b) => seen.set(firstVerb(b), (seen.get(firstVerb(b)) ?? 0) + 1)));
-  const best = exps.findIndex((e) => !isInternship(e.title));
-  return exps
-    .map((e, i) => {
-      if (isInternship(e.title)) {
-        const n = sentenceCount(e.description ?? "");
-        return n >= 2 && n <= 3
-          ? { index: i, min: 0, issues: [] as string[], score: 0 }
-          : { index: i, min: 0, issues: [`internship description must be two or three sentences (has ${n})`], score: 1 };
-      }
-      const min = i === best ? 8 : 5;
-      const issues: string[] = [];
-      const missing = Math.max(0, min - e.bullets.length);
-      if (missing) issues.push(`needs at least ${min} bullets (has ${e.bullets.length})`);
-      const shortList = e.bullets.filter((b) => words(b) < MIN_WORDS);
-      if (shortList.length) issues.push(`${shortList.length} bullet(s) under ${MIN_WORDS} words`);
-      const dupList = e.bullets.filter((b) => (seen.get(firstVerb(b)) ?? 0) > 1);
-      if (dupList.length) issues.push(`bullets starting with repeated verbs: ${[...new Set(dupList.map(firstVerb))].join(", ")}`);
-      return { index: i, min, issues, score: missing * 2 + shortList.length + dupList.length };
-    })
-    .filter((x) => x.issues.length);
-}
-
-/** One focused follow-up call that fixes only the experience bullets. Returns null if nothing usable came back. */
-async function repairBullets(openai: Pick<ResolvedOpenAI, "client" | "model">, exps: ResumeExperience[], jobText: string) {
-  const problems = bulletProblems(exps);
-  if (!problems.length) return null;
-  const best = exps.findIndex((e) => !isInternship(e.title));
-  const payload = exps.map((e, i) =>
-    isInternship(e.title)
-      ? { index: i, title: e.title, company: e.company, internship: true, description: e.description ?? "" }
-      : { index: i, title: e.title, company: e.company, minBullets: i === best ? 8 : 5, bullets: e.bullets }
-  );
-  try {
-    const res = await openai.client.chat.completions.create({
-      model: openai.model,
-      response_format: { type: "json_object" },
-      temperature: 0.5,
-      messages: [
-        {
-          role: "system",
-          content:
-            "You fix resume experience entries. For roles marked internship: return a 'description' of two or three sentences (no bullets) with concrete details, keeping its facts. For all other roles: each role has at least its minBullets bullets; every bullet is ONE sentence of at least 17 words; every bullet starts with a strong action verb that is not used to start any other bullet in the whole resume; include concrete metrics (numbers, %, $) in every bullet; no bold, no long dashes, no first person. Keep the original meaning and technologies, tailor to the job description, and keep good bullets unchanged. Return JSON: {\"experience\":[{\"index\":number,\"bullets\":string[],\"description\":string}]} covering every role (bullets for regular roles, description for internships).\n\n" +
-            HUMAN_STYLE,
-        },
-        {
-          role: "user",
-          content: `Problems found: ${problems.map((p) => `role ${p.index}: ${p.issues.join("; ")}`).join(" | ")}\n\nEvery bullet in the output must begin with a different verb (${exps.flatMap((e) => e.bullets).length}+ distinct verbs in total).\n\nROLES:\n${JSON.stringify(payload, null, 2)}\n\nJOB DESCRIPTION (for tailoring):\n${jobText.slice(0, 6000)}`,
-        },
-      ],
-    });
-    const out = JSON.parse(res.choices[0]?.message?.content ?? "{}") as { experience?: { index: number; bullets?: string[]; description?: string }[] };
-    const fixed = exps.map((e, i) => {
-      const f = out.experience?.find((x) => x.index === i);
-      if (isInternship(e.title)) {
-        const d = cleanResume(String(f?.description ?? ""));
-        return sentenceCount(d) >= 2 && sentenceCount(d) <= 3 ? { ...e, description: d } : e;
-      }
-      const bullets = (f?.bullets ?? []).map((b) => cleanResume(stripBullet(String(b)))).filter(Boolean);
-      return bullets.length >= Math.min(e.bullets.length, i === best ? 8 : 5) ? { ...e, bullets } : e;
-    });
-    // Keep the repair only if it actually reduced the problems.
-    const before = problems.reduce((a, p) => a + p.score, 0);
-    const after = bulletProblems(fixed).reduce((a, p) => a + p.score, 0);
-    return {
-      experience: after < before ? fixed : exps,
-      promptTokens: res.usage?.prompt_tokens ?? 0,
-      completionTokens: res.usage?.completion_tokens ?? 0,
-    };
-  } catch (e) {
-    console.error("bullet repair failed", e);
-    return null;
-  }
-}
-
 /**
- * Separate cover letter request, used when the main reply has none (e.g. a custom resume-only prompt in Settings).
- * Also returns the company and role, which such prompts tend to drop as well.
+ * Separate cover letter request, used when the main reply has none. Also returns the company and role, which such
+ * replies tend to drop as well.
  */
 async function writeCoverLetter(
   openai: Pick<ResolvedOpenAI, "client" | "model">,
@@ -557,25 +399,18 @@ async function writeCoverLetter(
   resume: ResumeContent,
   jobText: string,
   extraInstructions: string,
-  /** The filled custom prompt (Settings); its cover letter instructions replace the built-in rules. "" = built-in. */
-  customPrompt = ""
+  /** The filled prompt; its cover letter instructions, if any, replace the built-in rules. */
+  prompt: string
 ) {
   const extra = extraInstructions ? `\n\nAdditional instructions from the administrator:\n${extraInstructions}` : "";
-  const rules = customPrompt
-    ? `Write the cover letter exactly as the cover letter instructions in the prompt below describe (ignore its resume
-instructions; the tailored resume is given in the user message). If the prompt has no cover letter instructions, write
-a tailored letter that starts with "Dear Hiring Manager," and ends with "Sincerely," and "${profile.fullName}".
-Use only facts from the candidate's resume and profile; never invent employers, metrics or credentials. Plain text, no
-headers above the greeting.${extra}
+  const rules = `Write the cover letter as the cover letter instructions in the prompt below describe (ignore its resume
+instructions; the tailored resume is given in the user message). If the prompt has no cover letter instructions,
+follow these rules:
+${letterRules(profile.fullName)}
+Use only facts from the candidate's resume and profile. Plain text, no headers above the greeting.${extra}
 
 PROMPT:
-${customPrompt}`
-    : `coverLetter rules:
-- Start directly with "Dear Hiring Manager," (or the hiring manager's name if the posting gives it). Nothing before the greeting: no name, contact details, date or headers.
-- Five short paragraphs separated by blank lines: role interest with a strong hook; relevant skills and measurable achievements; motivation and culture fit; what the candidate brings to the team; thank you and a proactive follow-up.
-- Mirror the job description's keywords. Use only facts from the candidate's resume and profile; never invent employers, metrics or credentials.
-- Plain text only: no bold, symbols, bullet points, links or dashes of any kind.
-- End with "Sincerely," on its own line followed by "${profile.fullName}".${extra}`;
+${prompt}`;
   const resumeText = [
     `Summary: ${resume.summary}`,
     `Skills: ${resume.skills.flatMap((g) => g.items).join(", ")}`,
@@ -610,71 +445,6 @@ ${rules}`,
   }
 }
 
-/** Cover letters scoring at least this on the Job match card (with every check passing) are left as they are. */
-const LETTER_TARGET = 85;
-
-/**
- * Raises a weak cover letter's Job match score: scores it exactly as the Job match card does and, if it misses the
- * company, the role or the posting's top skills, asks for one focused revision that adds them. Only skills the tailored
- * resume already shows are requested, so nothing is invented. Returns the revision only when it scores higher.
- */
-async function improveCoverLetter(
-  openai: Pick<ResolvedOpenAI, "client" | "model">,
-  profile: ProfileFields,
-  resume: ResumeContent,
-  letter: string,
-  job: { text: string; company: string; role: string }
-) {
-  const before = scoreCoverLetter(letter, job.text, job.company, job.role);
-  if (before.score >= LETTER_TARGET && before.checks.every((c) => c.ok)) return null;
-  const resumeAll = resumePlainText(resume);
-  const skills = before.missing.filter((k) => mentionsKeyword(resumeAll, k.term) || k.alts?.some((t) => mentionsKeyword(resumeAll, t))).map((k) => k.term);
-  const failed = before.checks.filter((c) => !c.ok).map((c) => c.label);
-  const asks = [
-    job.company && `Name the company exactly as "${job.company}" in the first paragraph and once more later in the letter (the body, not a header).`,
-    job.role && `Name the role exactly as "${job.role}" in the first paragraph.`,
-    skills.length &&
-      `Work in each of these skills from the job description, spelled exactly like this, each tied to real work from the resume: ${skills.join(", ")}.`,
-    `Keep every skill the letter already names, and at least one concrete number or result from the resume.`,
-    `Length 280 to 400 words.`,
-  ].filter(Boolean);
-  try {
-    const res = await openai.client.chat.completions.create({
-      model: openai.model,
-      temperature: 0.5,
-      response_format: { type: "json_object" },
-      messages: [
-        {
-          role: "system",
-          content: `You revise a cover letter so it matches the job description more closely. Reply with JSON: {"coverLetter": string}.
-Keep its greeting, its paragraph structure, its tone and its sign-off ("Sincerely," then "${profile.fullName}") exactly. Plain text only:
-no headers above the greeting, no bold, bullets, links or dashes of any kind. Use only facts from the resume; never
-invent employers, metrics or credentials.
-Required changes:
-${asks.map((a) => `- ${a}`).join("\n")}
-
-${HUMAN_STYLE}`,
-        },
-        {
-          role: "user",
-          content: `Checks the current letter fails: ${failed.join("; ") || "none, but its score is low"}.\n\nCURRENT COVER LETTER:\n${letter}\n\nTAILORED RESUME:\n${resumeAll}\n\nJOB DESCRIPTION:\n${job.text.slice(0, 8000)}`,
-        },
-      ],
-    });
-    const out = JSON.parse(res.choices[0]?.message?.content ?? "{}") as { coverLetter?: unknown };
-    const revised = typeof out.coverLetter === "string" ? out.coverLetter.trim() : "";
-    const after = revised ? scoreCoverLetter(revised, job.text, job.company, job.role) : null;
-    return {
-      coverLetter: after && after.score > before.score ? revised : "",
-      promptTokens: res.usage?.prompt_tokens ?? 0,
-      completionTokens: res.usage?.completion_tokens ?? 0,
-    };
-  } catch (e) {
-    console.error("cover letter revision failed", e);
-    return null;
-  }
-}
-
 async function callModel(openai: Pick<ResolvedOpenAI, "client" | "model">, system: string, user: string) {
   try {
     const completion = await openai.client.chat.completions.create({
@@ -692,6 +462,10 @@ async function callModel(openai: Pick<ResolvedOpenAI, "client" | "model">, syste
   }
 }
 
+/**
+ * Resume + cover letter for a job. The prompt (Settings, else DEFAULT_RESUME_PROMPT) is followed as written: the app
+ * adds only the reply layout it parses, and takes job titles, companies, dates and education from the profile.
+ */
 export async function generateApplication(
   openai: Pick<ResolvedOpenAI, "client" | "model">,
   profile: ProfileFields,
@@ -699,24 +473,15 @@ export async function generateApplication(
   extraInstructions = "",
   promptTemplate = ""
 ): Promise<GenerationResult> {
-  // A custom prompt from Settings decides the content; the built-in rule checks below only apply to the default prompt.
-  const custom = !!promptTemplate.trim() && promptTemplate.trim() !== DEFAULT_RESUME_PROMPT.trim();
-  const filled = fillPrompt(custom ? promptTemplate.trim() : DEFAULT_RESUME_PROMPT, profile, job);
+  const template = promptTemplate.trim() || DEFAULT_RESUME_PROMPT;
+  const filled = fillPrompt(template, profile, job);
   const system =
-    withOutputContract(filled) +
+    withOutputContract(filled, profile.fullName) +
     (extraInstructions ? `\n\nAdditional instructions from the administrator:\n${extraInstructions}` : "");
-  const targets = jobTargets(job);
-  const jobBlock = `JOB DESCRIPTION LINK: ${job.url || "(not provided; pasted by the user)"}
-
-JOB DESCRIPTION CONTENT:
-${job.text}`;
-  // A custom prompt is followed as written: no keyword targets or style rules of our own, which would override its
-  // evidence rules (e.g. "every job keyword in the skills", "a number in most bullets").
-  const user = !custom
-    ? `${jobBlock}\n\n${targets}\n\n${HUMAN_STYLE}`
-    : JOB_PLACEHOLDERS.some((ph) => promptTemplate.includes(ph))
-      ? "Write the resume and cover letter for the job description given above, following every instruction and the required output layout."
-      : jobBlock;
+  // The job goes inside the prompt when it has the job placeholders, else in this message.
+  const user = JOB_PLACEHOLDERS.some((ph) => template.includes(ph))
+    ? "Write the resume and cover letter for the job description given above, following every instruction and the required output layout."
+    : `JOB DESCRIPTION LINK: ${job.url || "(not provided; pasted by the user)"}\n\nJOB DESCRIPTION CONTENT:\n${job.text}`;
 
   let completion = await callModel(openai, system, user);
   let parsed = parseResumeGPT(completion.choices[0]?.message?.content ?? "");
@@ -729,9 +494,7 @@ ${job.text}`;
     completion = await callModel(
       openai,
       system,
-      custom
-        ? `${user}\n\nIMPORTANT: Follow the required output layout exactly: COMPANY/ROLE lines, every resume section title on its own line starting with "# " (a summary section and an experience section with "• " bullets are required), then "---" and "COVER LETTER".`
-        : `${user}\n\nIMPORTANT: Follow the output format exactly: COMPANY/ROLE lines, # PROFESSIONAL SUMMARY, # CORE SKILLS, # PROFESSIONAL EXPERIENCE, # SELECTED PROJECTS, then "---" and "COVER LETTER".`
+      `${user}\n\nIMPORTANT: Follow the required output layout exactly: COMPANY/ROLE/HEADLINE lines, every resume section title on its own line starting with "# " (a summary section and an experience section with "• " bullets are required), then "---" and "COVER LETTER".`
     );
     const second = parseResumeGPT(completion.choices[0]?.message?.content ?? "");
     promptTokens += completion.usage?.prompt_tokens ?? 0;
@@ -740,50 +503,29 @@ ${job.text}`;
   }
   if (!parsed.summary && !parsed.experience.length) throw new HttpError(502, "The AI response could not be read. Please try again.");
 
-  // Match parsed experience to profile roles (by company name, then by order); facts come from the profile.
+  // Match parsed experience to profile roles (by company name, then by order); titles, companies and dates come from
+  // the profile exactly.
   const used = new Set<number>();
   const experience: ResumeExperience[] = profile.experience.map((e, i) => {
     let idx = parsed.experience.findIndex((x, j) => !used.has(j) && norm(x.companyLine).includes(norm(e.company)));
     if (idx < 0 && !used.has(i) && parsed.experience[i]) idx = i;
     if (idx >= 0) used.add(idx);
-    const ai = idx >= 0 ? parsed.experience[idx] : undefined;
-    const bullets = (ai?.bullets ?? []).map((b) => cleanResume(b)).filter(Boolean);
-    const base = {
+    const bullets = (idx >= 0 ? parsed.experience[idx].bullets : []).map((b) => cleanResume(b)).filter(Boolean);
+    return {
       company: e.company,
-      // A custom prompt's job titles stay exactly as in the profile; the default prompt allows a short "(focus)" suffix.
-      title: custom ? e.title || "" : tailoredTitle(e.title || "", ai?.title ?? ""),
+      title: e.title || "",
       location: e.location || "",
       startDate: e.startDate || "",
       endDate: e.current ? "" : e.endDate || "",
-    };
-    if (!custom && isInternship(e.title || "")) {
-      const source =
-        ai?.description ||
-        (bullets.length ? bullets.slice(0, 2).map((b) => (/[.!?]$/.test(b) ? b : `${b}.`)).join(" ") : "") ||
-        (e.description || "").split("\n").map((l) => stripBullet(l).trim()).filter(Boolean).slice(0, 2).map((b) => (/[.!?]$/.test(b) ? b : `${b}.`)).join(" ");
-      return { ...base, bullets: [], description: cleanResume(twoSentences(source)) };
-    }
-    return {
-      ...base,
       bullets: bullets.length ? bullets : (e.description || "").split("\n").map((l) => cleanResume(stripBullet(l))).filter(Boolean),
     };
   });
 
-  // Enforce the default prompt's bullet rules (count / 17+ words / unique verbs) with one focused repair call if needed.
-  // Skipped for a custom prompt: its own bullet rules apply and a repair would rewrite them.
-  for (let round = 0; !custom && round < 2; round++) {
-    const repaired = await repairBullets(openai, experience, job.text);
-    if (!repaired) break;
-    experience.splice(0, experience.length, ...repaired.experience);
-    promptTokens += repaired.promptTokens;
-    completionTokens += repaired.completionTokens;
-  }
-
   const resume: ResumeContent = {
     fullName: profile.fullName,
     headline: RESUME_HEADLINE,
-    // A custom prompt's target headline (HEADLINE line) is shown under the name; otherwise the profile's title.
-    ...(custom && parsed.headline
+    // The target headline from the reply (HEADLINE line) is shown under the name; otherwise the profile's title.
+    ...(parsed.headline
       ? { titleLine: cleanResume(parsed.headline) }
       : profile.professionalTitle?.trim()
         ? { titleLine: profile.professionalTitle.trim() }
@@ -798,7 +540,7 @@ ${job.text}`;
     },
     summary: cleanResume(parsed.summary || profile.summary || ""),
     skills:
-      custom && parsed.skillGroups.length > 1
+      parsed.skillGroups.length > 1
         ? parsed.skillGroups.map((g) => ({ category: cleanResume(g.category), items: g.items.map((x) => cleanResume(x)).filter(Boolean) }))
         : [{ category: "", items: (parsed.skills.length ? parsed.skills : profile.skills).map((x) => cleanResume(x)).filter(Boolean) }],
     experience,
@@ -820,9 +562,9 @@ ${job.text}`;
     certifications: [],
   };
 
-  // The prompt (e.g. a resume-only custom prompt) produced no cover letter: write it with a dedicated request.
+  // The reply had no cover letter: write it with a dedicated request.
   if (!parsed.coverLetter.trim()) {
-    const letter = await writeCoverLetter(openai, profile, resume, custom ? job.text : `${job.text}\n\n${targets}\n\n${HUMAN_STYLE}`, extraInstructions, custom ? filled : "");
+    const letter = await writeCoverLetter(openai, profile, resume, job.text, extraInstructions, filled);
     if (letter) {
       parsed.coverLetter = letter.coverLetter;
       if (!parsed.company) parsed.company = letter.company;
@@ -832,32 +574,16 @@ ${job.text}`;
     }
   }
 
-  const finishLetter = (raw: string) => {
-    const letter = cleanLetter(letterParagraphBreaks(raw))
-      // "Dear Hiring Manager" → "Dear Hiring Manager," (traditional business letter)
-      .replace(/^(Dear [^\n,:]+?)\s*[:]?\s*$/m, "$1,")
-      // keep the sign-off and the name together on consecutive lines
-      .replace(/\n\s*\n(Sincerely|Best regards|Kind regards|Regards),?\s*\n\s*\n([^\n]+)\s*$/i, "\n\n$1,\n$2");
-    return letter && !/sincerely/i.test(letter) ? `${letter}\n\nSincerely,\n${profile.fullName}` : letter;
-  };
-  let coverLetter = finishLetter(parsed.coverLetter);
-  const company = parsed.company || job.company || "";
-  const jobTitle = parsed.role || job.title || "";
-
-  // Weak Job match (company, role or top skills missing): one focused revision, kept only if it scores higher.
-  // Default prompt only: the revision adds keywords and sets a length, which a custom prompt decides itself.
-  if (coverLetter && !custom) {
-    const better = await improveCoverLetter(openai, profile, resume, coverLetter, { text: job.text, company, role: jobTitle });
-    if (better) {
-      if (better.coverLetter) coverLetter = finishLetter(better.coverLetter);
-      promptTokens += better.promptTokens;
-      completionTokens += better.completionTokens;
-    }
-  }
+  const letter = cleanLetter(letterParagraphBreaks(parsed.coverLetter))
+    // "Dear Hiring Manager" → "Dear Hiring Manager," (traditional business letter)
+    .replace(/^(Dear [^\n,:]+?)\s*[:]?\s*$/m, "$1,")
+    // keep the sign-off and the name together on consecutive lines
+    .replace(/\n\s*\n(Sincerely|Best regards|Kind regards|Regards),?\s*\n\s*\n([^\n]+)\s*$/i, "\n\n$1,\n$2");
+  const coverLetter = letter && !/sincerely/i.test(letter) ? `${letter}\n\nSincerely,\n${profile.fullName}` : letter;
 
   return {
-    company,
-    jobTitle,
+    company: parsed.company || job.company || "",
+    jobTitle: parsed.role || job.title || "",
     jobLocation: job.location || "",
     jobDescription: job.text,
     resume,
